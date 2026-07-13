@@ -396,7 +396,8 @@ class AuthController extends Controller
             ]);
 
             return response()->json([
-                'message' => 'Authentication service unavailable'
+                'message' => 'Authentication service unavailable',
+                'error' => $e->getMessage()
             ], 500);
         }
     }
