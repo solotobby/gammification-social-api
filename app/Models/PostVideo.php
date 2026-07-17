@@ -28,6 +28,8 @@ class PostVideo extends Model
         'view_count',
         'play_count',
         'avg_watch_time',
+        'hd_path',
+        'failure_reason',
     ];
 
     protected $casts = [

@@ -23,7 +23,8 @@ class Post extends Model
         'status',
         'unicode',
         'has_video',
-        'has_images'
+        'has_images',
+        'media_status',
     ];
 
     public function user()
@@ -40,6 +41,27 @@ class Post extends Model
     {
         return $this->hasOne(PostVideo::class, 'post_id', 'id');
     }
+
+    public function refreshMediaStatus(): void
+    {
+        if ($this->has_video) {
+            $status = $this->video()->value('processing_status') ?? 'processing';
+        } elseif ($this->has_images) {
+            $statuses = $this->images()->pluck('processing_status');
+
+            $status = match (true) {
+                $statuses->isEmpty() => 'processing',
+                $statuses->contains('failed') => 'failed',
+                $statuses->every(fn($s) => $s === 'completed') => 'completed',
+                default => 'processing',
+            };
+        } else {
+            $status = 'completed';
+        }
+
+        $this->update(['media_status' => $status]);
+    }
+
 
     public function likes()
     {

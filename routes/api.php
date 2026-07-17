@@ -44,7 +44,13 @@ Route::prefix('v1')->group(function () {
         Route::prefix('timeline')->group(function () {
             Route::get('feed', [FeedController::class, 'feed']);
             Route::post('post', [FeedController::class, 'createPost']);
+            Route::post('like/toggle', [FeedController::class, 'toggleLikePost']);
+            Route::post('comment', [FeedController::class, 'postComment']);
+            Route::get('post/{postId}', [FeedController::class, 'viewPost']);
+           
         });
+
+
 
 
 

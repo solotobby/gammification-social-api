@@ -3,8 +3,13 @@
 namespace App\Http\Controllers\V1\Timeline;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessComment;
+use App\Jobs\ProcessPostImage;
+use App\Jobs\ProcessPostVideo;
+use App\Jobs\ProcessToggleLike;
+use App\Jobs\ProcessView;
 use App\Models\Post;
-use App\Models\PostImages;
+
 use App\Services\HashTagServices;
 use App\Services\UserServices;
 use Illuminate\Http\Request;
@@ -14,6 +19,10 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+// use App\Jobs\ProcessPostImage;
+// use App\Jobs\ProcessPostVideo;
+use App\Models\PostImages;
+use App\Models\PostVideo;
 
 
 class FeedController extends Controller
@@ -32,26 +41,67 @@ class FeedController extends Controller
     }
 
 
-
     public function feed()
     {
         try {
-            $post = Post::with(['user:id,username,name'])
-                ->where('status', 'LIVE')->latest('created_at')
-                ->select(['id', 'user_id', 'content', 'views', 'likes', 'comments', 'has_video', 'has_images', 'created_at'])
-                ->paginate(5);
+            $posts = Post::with(['user:id,username,name'])
+                ->with(['video' => function ($q) {
+                    $q->where('processing_status', 'completed')
+                        ->select(['id', 'post_id', 'path', 'hd_path', 'thumbnail_path', 'duration', 'width', 'height']);
+                }])
+                ->with(['images' => function ($q) {
+                    $q->where('processing_status', 'completed')
+                        ->select(['id', 'post_id', 'path', 'thumbnail_path', 'full_path', 'width', 'height']);
+                }])
+                ->where('status', 'LIVE')
+                ->latest('created_at')
+                ->select(['id', 'user_id', 'content', 'views', 'likes', 'comments', 'has_video', 'has_images', 'media_status', 'created_at'])
+                ->paginate(10);
+
+            $posts->getCollection()->transform(function (Post $post) {
+                $post->media = null;
+
+                if ($post->media_status !== 'completed') {
+                    return $post;
+                }
+
+                if ($post->has_video && $post->video) {
+                    $post->media = [
+                        'type' => 'video',
+                        'sd_url' => $post->video->path,
+                        'hd_url' => $post->video->hd_path,
+                        'poster_url' => $post->video->thumbnail_path,
+                        'duration' => $post->video->duration,
+                        'width' => $post->video->width,
+                        'height' => $post->video->height,
+                    ];
+                } elseif ($post->has_images && $post->images->isNotEmpty()) {
+                    $post->media = [
+                        'type' => 'images',
+                        'items' => $post->images->map(fn($img) => [
+                            'thumb_url' => $img->thumbnail_path,
+                            'medium_url' => $img->path,
+                            'full_url' => $img->full_path,
+                            'width' => $img->width,
+                            'height' => $img->height,
+                        ])->values(),
+                    ];
+                }
+
+                unset($post->video, $post->images); // drop the raw relations, keep the flat `media` block
+
+                return $post;
+            });
 
             return response()->json([
                 'success' => true,
                 'message' => 'Feeds',
-                'data' => $post
+                'data' => $posts,
             ], 200);
         } catch (Throwable $e) {
-
             Log::error('Failed to load feed', [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
-                // 'user_id' => optional($request->user())->id,
             ]);
 
             return response()->json([
@@ -60,219 +110,175 @@ class FeedController extends Controller
                 'error_temp' => $e->getMessage(),
             ], 500);
         }
-        // return ['title', 'Descriptoin'];
     }
+
+
+
+
 
     public function createPost(Request $request, UserServices $userServices, HashTagServices $hashtagservices)
     {
-
-
         try {
-
-
             $user = $request->user();
             if (!$user) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Unauthenticated'
-                ], 401);
+                return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
             }
 
+            $level = $this->userServices->activeLevel($user);
+            $tier = config("media_tiers.tiers.{$level}", config('media_tiers.tiers.default'));
 
 
 
-            $level =  $this->userServices->activeLevel($user); //get current user active Level
+
 
             $rules = [
-                'content' => [
-                    'required',
-                    'string'
-                ],
-                'images' => [
-                    'nullable',
-                    'array'
-                ]
+                'content' => ['required', 'string'],
+                'images' => ['nullable', 'array'],
+                'video' => ['nullable', 'file'],
             ];
 
-
             if (!in_array($level, ['Creator', 'Influencer'])) {
-
                 $rules['content'][] = 'max:160';
-
-                $rules['images'][] = 'prohibited';
-            } else {
-
-                $rules['images'][] = 'max:4';
-
-                $rules['images.*'] = [
-                    'image',
-                    'max:2048'
-                ];
             }
 
+            if ($tier['images']['allowed']) {
+                $rules['images'][] = 'max:' . $tier['images']['max'];
+                $rules['images.*'] = [
+                    'image',
+                    'mimes:jpg,jpeg,png,webp',
+                    'max:' . config('media_tiers.image.max_upload_kb'),
+                ];
+            } else {
+                $rules['images'][] = 'prohibited';
+            }
 
+            if ($tier['video']['allowed']) {
+                $rules['video'][] = 'mimes:mp4,mov,webm,avi';
+                $rules['video'][] = 'max:' . (config('media_tiers.video.max_upload_mb') * 1024);
+            } else {
+                $rules['video'][] = 'prohibited';
+            }
 
             $validated = $request->validate($rules);
 
-            if ($validated['content'] == '') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'You need to write a post'
-                ], 422);
+            if (trim($validated['content']) === '') {
+                return response()->json(['success' => false, 'message' => 'You need to write a post'], 422);
             }
-
-            $maxImages = match ($level) {
-
-                'Creator' => 1,
-
-                'Influencer' => 4,
-
-                default => 0,
-            };
 
             $images = $request->file('images', []);
+            $video = $request->file('video');
 
-
-
-            if ($maxImages === 0 && count($images)) {
-
+            if (count($images) > 0 && $video) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'You are not allowed to upload images'
+                    'message' => 'Post with either images or a video, not both',
                 ], 422);
             }
 
+            $content = $this->convertUrlsToLinks(strip_tags($validated['content']));
 
-            if (count($images) > $maxImages) {
 
-                return response()->json([
-                    'success' => false,
-                    'message' => "Maximum {$maxImages} images allowed"
-                ], 422);
-            }
-
-            $content = $this->convertUrlsToLinks(
-                strip_tags($validated['content'])
-            );
 
             if (empty(trim($content))) {
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Post content cannot be empty'
-                ], 422);
+                return response()->json(['success' => false, 'message' => 'Post content cannot be empty'], 422);
             }
 
-
-            $previousPosts = Post::where(
-                'user_id',
-                $user->id
-            )
-                ->pluck('content')
-                ->toArray();
-
+            $previousPosts = Post::where('user_id', $user->id)->pluck('content')->toArray();
 
             if ($this->isSimilar($content, $previousPosts, 4)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'This content is too similar to an existing post'
+                    'message' => 'This content is too similar to an existing post',
                 ], 422);
             }
 
-
-            return DB::transaction(function () use (
+            [$post, $queued] = DB::transaction(function () use (
                 $user,
                 $content,
                 $images,
-                $level,
+                $video,
                 $hashtagservices
             ) {
+                $status = $user->status === 'ACTIVE' ? 'LIVE' : 'SHADOW_BANNED';
+                $hasMedia = (count($images) > 0) || $video;
 
-
-                /**
-                 * Shadow ban handling
-                 */
-                $status =
-                    $user->status === 'ACTIVE'
-                    ? 'LIVE'
-                    : 'SHADOW_BANNED';
-
-
-
-
-                /**
-                 * Create Post
-                 */
                 $post = Post::create([
                     'user_id' => $user->id,
                     'content' => $content,
                     'unicode' => rand(1000, 9999) . time(),
                     'comment_external' => 0,
-                    'status' => $status
-
+                    'status' => $status,
+                    'media_status' => $hasMedia ? 'processing' : 'ready',
                 ]);
 
-                /**
-                 * Attach hashtags
-                 */
-                $hashtagservices->attach(
-                    $post,
-                    $post->content
-                );
+                $hashtagservices->attach($post, $post->content);
 
-                /**
-                 * Upload images
-                 */
+                $queued = ['images' => [], 'video' => null];
+
                 foreach ($images as $image) {
+                    $localPath = $image->store('queue/images', 'local');
 
-
-                    $path = Storage::disk('spaces')
-                        ->putFileAs(
-                            'payhankey_media/images',
-                            $image,
-                            Str::uuid()
-                                . '-'
-                                . $user->id,
-                            'public'
-                        );
-
-
-
-                    $url =
-                        config('filesystems.disks.spaces.url')
-                        . '/'
-                        . $path;
-
-                    PostImages::create([
-
+                    $record = PostImages::create([
                         'user_id' => $user->id,
-
                         'post_id' => $post->id,
-
-                        'path' => $url
-
+                        'path' => $localPath,
+                        'processing_status' => 'processing',
                     ]);
+
+                    $queued['images'][] = [
+                        'id' => $record->id,
+                        'local' => Storage::disk('local')->path($localPath), // was storage_path('app/' . $localPath)
+                    ];
                 }
 
-                return response()->json([
+                if ($video) {
+                    $localPath = $video->store('queue/videos', 'local');
 
-                    'success' => true,
-
-                    'message' => 'Post created successfully',
-
-                    'data' => [
+                    $record = PostVideo::create([
+                        'id' => (string) Str::uuid(),
+                        'path' => $localPath,
+                        'user_id' => $user->id,
                         'post_id' => $post->id,
-                        'status' => $post->status,
-                    ]
+                        'processing_status' => 'processing',
+                    ]);
 
-                ], 201);
+                    $queued['video'] = [
+                        'id' => $record->id,
+                        'local' => Storage::disk('local')->path($localPath), // was storage_path('app/' . $localPath)
+                    ];
+                }
+
+                return [$post, $queued];
             });
-        } catch (Throwable $e) {
 
+            foreach ($queued['images'] as $img) {
+                ProcessPostImage::dispatch($img['id'], $img['local'], $user->id)->afterCommit();
+            }
+            if ($queued['video']) {
+                ProcessPostVideo::dispatch(
+                    $queued['video']['id'],
+                    $queued['video']['local'],
+                    $user->id,
+                    $tier['video']['max_seconds'],
+                    $level === 'Influencer',
+                )->afterCommit();
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $post->media_status === 'processing'
+                    ? 'Post created — media is processing and will appear shortly'
+                    : 'Post created successfully',
+                'data' => [
+                    'post_id' => $post->id,
+                    'status' => $post->status,
+                    'media_status' => $post->media_status,
+                ],
+            ], 201);
+        } catch (Throwable $e) {
             Log::error('Failed to post content', [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
-                // 'user_id' => optional($request->user())->id,
             ]);
 
             return response()->json([
@@ -312,5 +318,125 @@ class FeedController extends Controller
         $text = preg_replace('/[^\w\s]/', '', $text);
         $text = preg_replace('/\s+/', ' ', $text);
         return strtolower(trim($text));
+    }
+
+    public function toggleLikePost(Request $request)
+    {
+        $validated = $request->validate([
+            'post_id' => ['required', 'string'],
+        ]);
+
+        try {
+            $user = $request->user();
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+            }
+
+            $post = Post::findOrFail($validated['post_id']);
+
+
+            ProcessToggleLike::dispatch($post->id, $post->unicode, $user)->afterCommit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Like toggle queued',
+            ], 202);
+        } catch (Throwable $e) {
+            Log::error('Failed to toggle like on post', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'There was an error while toggling like on post',
+                'error_temp' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function postComment(Request $request)
+    {
+        $validated = $request->validate([
+            'post_id' => ['required', 'string'],
+            'comment' => ['required', 'string', 'max:500'],
+        ]);
+
+
+        try {
+            $user = $request->user();
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+            }
+
+            $post = Post::findOrFail($request->input('post_id'));
+
+            if (!$post) {
+                return response()->json(['success' => false, 'message' => 'Post not found'], 404);
+            }
+
+            ProcessComment::dispatch($post->id, $user, $validated['comment']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Comment posted successfully',
+            ], 202);
+
+        } catch (Throwable $e) {
+            Log::error('Failed to post comment', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'There was an error while posting comment',
+                'error_temp' => $e->getMessage(),
+            ], 500);
+        }
+        // Implement the logic for posting a comment here
+
+    }
+
+    public function viewPost(Request $request, $postId)
+    {
+        try {
+             $user = $request->user();
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+            }
+            $post = Post::with(['user:id,username,name'])
+                ->with(['video' => function ($q) {
+                    $q->where('processing_status', 'completed')
+                        ->select(['id', 'post_id', 'path', 'hd_path', 'thumbnail_path', 'duration', 'width', 'height']);
+                }])
+                ->with(['images' => function ($q) {
+                    $q->where('processing_status', 'completed')
+                        ->select(['id', 'post_id', 'path', 'thumbnail_path', 'full_path', 'width', 'height']);
+                }])
+                ->where('status', 'LIVE')
+                ->where('id', $postId)
+                ->firstOrFail();
+
+
+                ProcessView::dispatch($post, $user)->afterCommit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Post details',
+                'data' => $post,
+            ], 200);
+        } catch (Throwable $e) {
+            Log::error('Failed to load post details', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load post details',
+                'error_temp' => $e->getMessage(),
+            ], 500);
+        }
     }
 }
