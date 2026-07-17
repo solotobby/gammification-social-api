@@ -417,9 +417,11 @@ class FeedController extends Controller
                 ->where('status', 'LIVE')
                 ->where('id', $postId)
                 ->firstOrFail();
+                
+                $post->increment('views');
 
 
-                ProcessView::dispatch($post, $user)->afterCommit();
+                // ProcessView::dispatch($post, $user)->afterCommit();
 
             return response()->json([
                 'success' => true,
