@@ -8,6 +8,7 @@ use App\Jobs\ProcessPostImage;
 use App\Jobs\ProcessPostVideo;
 use App\Jobs\ProcessToggleLike;
 use App\Jobs\ProcessView;
+use App\Models\Comment;
 use App\Models\Post;
 
 use App\Services\HashTagServices;
@@ -41,6 +42,82 @@ class FeedController extends Controller
     }
 
 
+    // public function feed()
+    // {
+    //     try {
+    //         $posts = Post::with(['user:id,username,name'])
+    //             ->with(['video' => function ($q) {
+    //                 $q->where('processing_status', 'completed')
+    //                     ->select(['id', 'post_id', 'path', 'hd_path', 'thumbnail_path', 'duration', 'width', 'height']);
+    //             }])
+    //             ->with(['images' => function ($q) {
+    //                 $q->where('processing_status', 'completed')
+    //                     ->select(['id', 'post_id', 'path', 'thumbnail_path', 'full_path', 'width', 'height']);
+    //             }])
+    //             ->where('status', 'LIVE')
+    //             ->latest('created_at')
+    //             ->select(['id', 'user_id', 'content', 'views', 'likes', 'comments', 'has_video', 'has_images', 'media_status', 'created_at'])
+    //             ->paginate(10);
+
+    //         $posts->getCollection()->transform(function (Post $post) {
+    //             $post->media = null;
+
+    //             if ($post->media_status !== 'completed') {
+    //                 return $post;
+    //             }
+
+    //             if ($post->has_video && $post->video) {
+    //                 $post->media = [
+    //                     'type' => 'video',
+    //                     'sd_url' => $post->video->path,
+    //                     'hd_url' => $post->video->hd_path,
+    //                     'poster_url' => $post->video->thumbnail_path,
+    //                     'duration' => $post->video->duration,
+    //                     'width' => $post->video->width,
+    //                     'height' => $post->video->height,
+    //                 ];
+    //             } elseif ($post->has_images && $post->images->isNotEmpty()) {
+    //                 $post->media = [
+    //                     'type' => 'images',
+    //                     'items' => $post->images->map(fn($img) => [
+    //                         'thumb_url' => $img->thumbnail_path,
+    //                         'medium_url' => $img->path,
+    //                         'full_url' => $img->full_path,
+    //                         'width' => $img->width,
+    //                         'height' => $img->height,
+    //                     ])->values(),
+    //                 ];
+    //             }
+
+    //             unset($post->video, $post->images); // drop the raw relations, keep the flat `media` block
+
+    //             return $post;
+    //         });
+
+
+
+    //         return response()->json([
+    //             'success' => true,
+    //             'message' => 'Feeds',
+    //             'data' => $posts,
+    //         ], 200);
+    //     } catch (Throwable $e) {
+    //         Log::error('Failed to load feed', [
+    //             'message' => $e->getMessage(),
+    //             'trace' => $e->getTraceAsString(),
+    //         ]);
+
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Failed to load feeds',
+    //             'error_temp' => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
+
+
+
     public function feed()
     {
         try {
@@ -53,42 +130,56 @@ class FeedController extends Controller
                     $q->where('processing_status', 'completed')
                         ->select(['id', 'post_id', 'path', 'thumbnail_path', 'full_path', 'width', 'height']);
                 }])
+                ->with(['postComments' => function ($q) {
+                    $q->with('user:id,username,name')
+                        ->whereIn('id', function ($sub) {
+                            $sub->select('id')
+                                ->from(DB::raw('(SELECT id, post_id, ROW_NUMBER() OVER (PARTITION BY post_id ORDER BY created_at DESC) AS rn FROM comments) AS ranked'))
+                                ->where('rn', '<=', 3);
+                        })
+                        ->latest();
+                }])
                 ->where('status', 'LIVE')
                 ->latest('created_at')
                 ->select(['id', 'user_id', 'content', 'views', 'likes', 'comments', 'has_video', 'has_images', 'media_status', 'created_at'])
-                ->paginate(10);
+                ->paginate(5);
 
             $posts->getCollection()->transform(function (Post $post) {
                 $post->media = null;
 
-                if ($post->media_status !== 'completed') {
-                    return $post;
+                if ($post->media_status === 'completed') {
+                    if ($post->has_video && $post->video) {
+                        $post->media = [
+                            'type' => 'video',
+                            'sd_url' => $post->video->path,
+                            'hd_url' => $post->video->hd_path,
+                            'poster_url' => $post->video->thumbnail_path,
+                            'duration' => $post->video->duration,
+                            'width' => $post->video->width,
+                            'height' => $post->video->height,
+                        ];
+                    } elseif ($post->has_images && $post->images->isNotEmpty()) {
+                        $post->media = [
+                            'type' => 'images',
+                            'items' => $post->images->map(fn($img) => [
+                                'thumb_url' => $img->thumbnail_path,
+                                'medium_url' => $img->path,
+                                'full_url' => $img->full_path,
+                                'width' => $img->width,
+                                'height' => $img->height,
+                            ])->values(),
+                        ];
+                    }
                 }
 
-                if ($post->has_video && $post->video) {
-                    $post->media = [
-                        'type' => 'video',
-                        'sd_url' => $post->video->path,
-                        'hd_url' => $post->video->hd_path,
-                        'poster_url' => $post->video->thumbnail_path,
-                        'duration' => $post->video->duration,
-                        'width' => $post->video->width,
-                        'height' => $post->video->height,
-                    ];
-                } elseif ($post->has_images && $post->images->isNotEmpty()) {
-                    $post->media = [
-                        'type' => 'images',
-                        'items' => $post->images->map(fn($img) => [
-                            'thumb_url' => $img->thumbnail_path,
-                            'medium_url' => $img->path,
-                            'full_url' => $img->full_path,
-                            'width' => $img->width,
-                            'height' => $img->height,
-                        ])->values(),
-                    ];
-                }
+                $post->comments_preview = $post->postComments->map(fn($c) => [
+                    'id' => $c->id,
+                    'user' => $c->user?->only(['id', 'username', 'name']),
+                    'message' => $c->message,
+                    'created_at' => $c->created_at,
+                ])->values();
 
-                unset($post->video, $post->images); // drop the raw relations, keep the flat `media` block
+                unset($post->video, $post->images, $post->postComments);
 
                 return $post;
             });
@@ -111,8 +202,6 @@ class FeedController extends Controller
             ], 500);
         }
     }
-
-
 
 
 
@@ -381,7 +470,6 @@ class FeedController extends Controller
                 'success' => true,
                 'message' => 'Comment posted successfully',
             ], 202);
-
         } catch (Throwable $e) {
             Log::error('Failed to post comment', [
                 'message' => $e->getMessage(),
@@ -401,10 +489,11 @@ class FeedController extends Controller
     public function viewPost(Request $request, $postId)
     {
         try {
-             $user = $request->user();
+            $user = $request->user();
             if (!$user) {
                 return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
             }
+
             $post = Post::with(['user:id,username,name'])
                 ->with(['video' => function ($q) {
                     $q->where('processing_status', 'completed')
@@ -417,16 +506,23 @@ class FeedController extends Controller
                 ->where('status', 'LIVE')
                 ->where('id', $postId)
                 ->firstOrFail();
-                
-                $post->increment('views');
 
+                $post->increment('views'); //would be removed later and replaced with a job to handle view count incrementing asynchronously
 
-                // ProcessView::dispatch($post, $user)->afterCommit();
+            $comments = Comment::with('user:id,username,name')
+                ->where('post_id', $post->id)->select(['id', 'post_id', 'user_id', 'message', 'created_at'])
+                ->latest()
+                ->paginate(10, ['*'], 'comments_page'); // separate page param from any outer pagination
+
+            // RecordViewJob::dispatch($post->id, $user->id);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Post details',
-                'data' => $post,
+                'data' => [
+                    'post' => $post,
+                    'comments' => $comments,
+                ],
             ], 200);
         } catch (Throwable $e) {
             Log::error('Failed to load post details', [
@@ -437,6 +533,83 @@ class FeedController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to load post details',
+                'error_temp' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    // public function viewPost(Request $request, $postId)
+    // {
+    //     try {
+    //         $user = $request->user();
+    //         if (!$user) {
+    //             return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+    //         }
+    //         $post = Post::with(['user:id,username,name'])
+    //             ->with(['video' => function ($q) {
+    //                 $q->where('processing_status', 'completed')
+    //                     ->select(['id', 'post_id', 'path', 'hd_path', 'thumbnail_path', 'duration', 'width', 'height']);
+    //             }])
+    //             ->with(['images' => function ($q) {
+    //                 $q->where('processing_status', 'completed')
+    //                     ->select(['id', 'post_id', 'path', 'thumbnail_path', 'full_path', 'width', 'height']);
+    //             }])
+    //             ->where('status', 'LIVE')
+    //             ->where('id', $postId)
+    //             ->firstOrFail();
+
+    //         $post->increment('views');
+
+
+    //         // ProcessView::dispatch($post, $user)->afterCommit();
+
+    //         return response()->json([
+    //             'success' => true,
+    //             'message' => 'Post details',
+    //             'data' => $post,
+    //         ], 200);
+    //     } catch (Throwable $e) {
+    //         Log::error('Failed to load post details', [
+    //             'message' => $e->getMessage(),
+    //             'trace' => $e->getTraceAsString(),
+    //         ]);
+
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Failed to load post details',
+    //             'error_temp' => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
+    public function deletePost(Request $request, $postId)
+    {
+        try {
+            $user = $request->user();
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+            }
+
+            $post = Post::where('id', $postId)->where('user_id', $user->id)->firstOrFail();
+
+            $post->delete();
+
+            PostImages::where('post_id', $postId)->delete();
+            PostVideo::where('post_id', $postId)->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Post deleted successfully',
+            ], 200);
+        } catch (Throwable $e) {
+            Log::error('Failed to delete post', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete post',
                 'error_temp' => $e->getMessage(),
             ], 500);
         }

@@ -47,6 +47,7 @@ Route::prefix('v1')->group(function () {
             Route::post('like/toggle', [FeedController::class, 'toggleLikePost']);
             Route::post('comment', [FeedController::class, 'postComment']);
             Route::get('post/{postId}', [FeedController::class, 'viewPost']);
+            Route::delete('delete/post/{postId}', [FeedController::class, 'deletePost']);
            
         });
 
