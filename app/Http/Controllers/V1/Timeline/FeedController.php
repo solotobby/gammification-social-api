@@ -142,7 +142,7 @@ class FeedController extends Controller
                 ->where('status', 'LIVE')
                 ->latest('created_at')
                 ->select(['id', 'user_id', 'content', 'views', 'likes', 'comments', 'has_video', 'has_images', 'media_status', 'created_at'])
-                ->paginate(5);
+                ->paginate(10);
 
             $posts->getCollection()->transform(function (Post $post) {
                 $post->media = null;
