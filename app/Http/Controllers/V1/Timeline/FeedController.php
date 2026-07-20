@@ -234,7 +234,7 @@ class FeedController extends Controller
                 $rules['images'][] = 'max:' . $tier['images']['max'];
                 $rules['images.*'] = [
                     'image',
-                    'mimes:jpg,jpeg,png,webp',
+                    'mimes:jpg,jpeg,png,webp,heic,avif',
                     'max:' . config('media_tiers.image.max_upload_kb'),
                 ];
             } else {
