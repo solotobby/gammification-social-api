@@ -24,19 +24,21 @@ use Illuminate\Support\Str;
 // use App\Jobs\ProcessPostVideo;
 use App\Models\PostImages;
 use App\Models\PostVideo;
-
+use App\Services\FeedService;
 
 class FeedController extends Controller
 {
 
     protected UserServices $userServices;
     protected HashTagServices $hashtagservices;
+    protected FeedService $feedService;
 
 
-    public function __construct(UserServices $userServices, HashTagServices $hashtagservices)
+    public function __construct(UserServices $userServices, HashTagServices $hashtagservices, FeedService $feedService)
     {
         $this->userServices = $userServices;
         $this->hashtagservices = $hashtagservices;
+        $this->feedService = $feedService;
         // $this->middleware('auth');
         // throw new \Exception('Not implemented');
     }
@@ -118,71 +120,13 @@ class FeedController extends Controller
 
 
 
-    public function feed()
+    public function feed(Request $request)
     {
         try {
-            $posts = Post::with(['user:id,username,name'])
-                ->with(['video' => function ($q) {
-                    $q->where('processing_status', 'completed')
-                        ->select(['id', 'post_id', 'path', 'hd_path', 'thumbnail_path', 'duration', 'width', 'height']);
-                }])
-                ->with(['images' => function ($q) {
-                    $q->where('processing_status', 'completed')
-                        ->select(['id', 'post_id', 'path', 'thumbnail_path', 'full_path', 'width', 'height']);
-                }])
-                ->with(['postComments' => function ($q) {
-                    $q->with('user:id,username,name')
-                        ->whereIn('id', function ($sub) {
-                            $sub->select('id')
-                                ->from(DB::raw('(SELECT id, post_id, ROW_NUMBER() OVER (PARTITION BY post_id ORDER BY created_at DESC) AS rn FROM comments) AS ranked'))
-                                ->where('rn', '<=', 3);
-                        })
-                        ->latest();
-                }])
-                ->where('status', 'LIVE')
-                ->latest('created_at')
-                ->select(['id', 'user_id', 'content', 'views', 'likes', 'comments', 'has_video', 'has_images', 'media_status', 'created_at'])
-                ->paginate(10);
 
-            $posts->getCollection()->transform(function (Post $post) {
-                $post->media = null;
+            $viewerId = $request->user()?->id;
 
-                if ($post->media_status === 'completed') {
-                    if ($post->has_video && $post->video) {
-                        $post->media = [
-                            'type' => 'video',
-                            'sd_url' => $post->video->path,
-                            'hd_url' => $post->video->hd_path,
-                            'poster_url' => $post->video->thumbnail_path,
-                            'duration' => $post->video->duration,
-                            'width' => $post->video->width,
-                            'height' => $post->video->height,
-                        ];
-                    } elseif ($post->has_images && $post->images->isNotEmpty()) {
-                        $post->media = [
-                            'type' => 'images',
-                            'items' => $post->images->map(fn($img) => [
-                                'thumb_url' => $img->thumbnail_path,
-                                'medium_url' => $img->path,
-                                'full_url' => $img->full_path,
-                                'width' => $img->width,
-                                'height' => $img->height,
-                            ])->values(),
-                        ];
-                    }
-                }
-
-                $post->comments_preview = $post->postComments->map(fn($c) => [
-                    'id' => $c->id,
-                    'user' => $c->user?->only(['id', 'username', 'name']),
-                    'message' => $c->message,
-                    'created_at' => $c->created_at,
-                ])->values();
-
-                unset($post->video, $post->images, $post->postComments);
-
-                return $post;
-            });
+            $posts = $this->feedService->getFeed($viewerId, 8);
 
             return response()->json([
                 'success' => true,
@@ -215,10 +159,6 @@ class FeedController extends Controller
 
             $level = $this->userServices->activeLevel($user);
             $tier = config("media_tiers.tiers.{$level}", config('media_tiers.tiers.default'));
-
-
-
-
 
             $rules = [
                 'content' => ['required', 'string'],
@@ -494,27 +434,9 @@ class FeedController extends Controller
                 return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
             }
 
-            $post = Post::with(['user:id,username,name'])
-                ->with(['video' => function ($q) {
-                    $q->where('processing_status', 'completed')
-                        ->select(['id', 'post_id', 'path', 'hd_path', 'thumbnail_path', 'duration', 'width', 'height']);
-                }])
-                ->with(['images' => function ($q) {
-                    $q->where('processing_status', 'completed')
-                        ->select(['id', 'post_id', 'path', 'thumbnail_path', 'full_path', 'width', 'height']);
-                }])
-                ->where('status', 'LIVE')
-                ->where('id', $postId)
-                ->firstOrFail();
-
-                $post->increment('views'); //would be removed later and replaced with a job to handle view count incrementing asynchronously
-
-            $comments = Comment::with('user:id,username,name')
-                ->where('post_id', $post->id)->select(['id', 'post_id', 'user_id', 'message', 'created_at'])
-                ->latest()
-                ->paginate(10, ['*'], 'comments_page'); // separate page param from any outer pagination
-
-            // RecordViewJob::dispatch($post->id, $user->id);
+            $viewerId = $user->id;
+            $post = $this->feedService->getPost($postId, $viewerId);
+            $comments = $this->feedService->getPostComments($postId, 10);
 
             return response()->json([
                 'success' => true,

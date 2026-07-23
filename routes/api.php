@@ -2,6 +2,8 @@
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\V1\AuthController;
+use App\Http\Controllers\V1\Earnings\AnalyticsController;
+use App\Http\Controllers\V1\Explore\ExploreController;
 use App\Http\Controllers\V1\Timeline\FeedController;
 use App\Http\Controllers\V1\User\UserController;
 use Illuminate\Support\Facades\Route;
@@ -36,9 +38,22 @@ Route::prefix('v1')->group(function () {
         ->middleware(['auth:api', 'throttle:60,1']); // 60/min for safety
 
     Route::middleware('auth:api')->group(function () {
+
         Route::prefix('user')->group(function () {
             Route::get('/me', [UserController::class, 'me']);
             Route::post('/onboard', [UserController::class, 'onboardUser']);
+            Route::get('/currency/list', [UserController::class, 'currency']);
+            Route::get('/channel', [UserController::class, 'channel']);
+            Route::get('/profile/{username}', [UserController::class, 'profile']);
+            Route::get('/search', [UserController::class, 'search']);
+            Route::get('/toggle/follow', [UserController::class, 'toggle']);
+        });
+
+        Route::prefix('explore')->group(function () {
+            Route::get('/trending', [ExploreController::class, 'trending']);
+            Route::get('/trending/hashtags', [ExploreController::class, 'trendingHashTags']);
+            Route::get('/trending/members', [ExploreController::class, 'trendingMembers']);
+            Route::get('/trending/hashtag/post', [ExploreController::class, 'getHastagPost']);
         });
 
         Route::prefix('timeline')->group(function () {
@@ -48,9 +63,13 @@ Route::prefix('v1')->group(function () {
             Route::post('comment', [FeedController::class, 'postComment']);
             Route::get('post/{postId}', [FeedController::class, 'viewPost']);
             Route::delete('delete/post/{postId}', [FeedController::class, 'deletePost']);
-           
         });
 
+         Route::prefix('earnings')->group(function () { 
+
+            Route::get('/analytics/monthly', [AnalyticsController::class, 'monthly']);
+            Route::get('/analytics/yearly', [AnalyticsController::class, 'yearly']);
+         });
 
 
 

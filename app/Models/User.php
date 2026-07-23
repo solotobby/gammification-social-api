@@ -13,6 +13,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Passport\HasApiTokens;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token'])]
@@ -40,7 +42,7 @@ class User extends Authenticatable
         'status'
     ];
 
-     protected $hidden = [
+    protected $hidden = [
         'password',
         'remember_token',
     ];
@@ -63,12 +65,61 @@ class User extends Authenticatable
 
     public function activeLevel()
     {
-        
-       return $this->hasOne(UserLevel::class, 'user_id')
-                ->where('status', 'active')
-                ->where('next_payment_date', '>', Carbon::now());
+
+        return $this->hasOne(UserLevel::class, 'user_id')
+            ->where('status', 'active')
+            ->where('next_payment_date', '>', Carbon::now());
+    }
+    public function profile()
+    {
+        return $this->hasOne(Profile::class, 'user_id');
     }
 
+    public function posts()
+    {
+        return $this->hasMany(Post::class);
+    }
 
+    public function social()
+    {
+        return $this->hasOne(Social::class, 'user_id');
+    }
 
+    public function scopeWithPostStatsByUsername(Builder $query, string $username)
+    {
+        return $query->where('username', $username)
+            ->withCount([
+                'posts as total_likes' => function ($query) {
+                    $query->select(DB::raw('COALESCE(SUM(likes),0)'));
+                },
+                'posts as total_likes_external' => function ($query) {
+                    $query->select(DB::raw('COALESCE(SUM(likes_external),0)'));
+                },
+                'posts as total_views_external' => function ($query) {
+                    $query->select(DB::raw('COALESCE(SUM(views_external),0)'));
+                },
+                'posts as total_views' => function ($query) {
+                    $query->select(DB::raw('COALESCE(SUM(views),0)'));
+                },
+                'posts as total_comments' => function ($query) {
+                    $query->select(DB::raw('COUNT(comments)'));
+                },
+            ]);
+    }
+
+    public function scopeSearch(Builder $query, string $term): Builder
+    {
+        $term = trim($term);
+
+        // Escape LIKE wildcard characters in user input so literal % or _ in a
+        // search term doesn't get treated as a wildcard.
+        $escaped = addcslashes($term, '%_\\');
+        $like = '%' . $escaped . '%';
+
+        return $query->where(function ($q) use ($like) {
+            $q->where('name', 'like', $like)
+                ->orWhere('username', 'like', $like)
+                ->orWhere('email', 'like', $like);
+        });
+    }
 }
