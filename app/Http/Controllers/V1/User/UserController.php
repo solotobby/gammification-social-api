@@ -220,7 +220,7 @@ class UserController extends Controller
                 return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
             }
 
-            $currency = Currency::where('is_active', true)->select(['symbol', 'country'])->get();
+            $currency = Currency::where('is_active', true)->select(['symbol', 'code', 'country'])->get();
 
             return response()->json([
                 'success' => true,
