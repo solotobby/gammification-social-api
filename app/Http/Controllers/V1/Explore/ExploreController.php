@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\V1\Explore;
 
 use App\Http\Controllers\Controller;
+use App\Services\FeedService;
 use App\Services\HashTagPost;
 use App\Services\TrendingHashTags;
 use App\Services\TrendingMembers;
@@ -19,12 +20,14 @@ class ExploreController extends Controller
     protected $trendingHashTags;
     protected $trendingMembers;
     protected $hashTagPost;
+    protected $feedService;
 
-    public function __construct(TrendingHashTags $trendingHashTags, TrendingMembers $trendingMembers, HashTagPost $hashTagPost)
+    public function __construct(TrendingHashTags $trendingHashTags, TrendingMembers $trendingMembers, HashTagPost $hashTagPost, FeedService $feedService)
     {
         $this->trendingHashTags = $trendingHashTags;
         $this->trendingMembers = $trendingMembers;
         $this->hashTagPost = $hashTagPost;
+        $this->feedService = $feedService;
     }
 
     public function trending(Request $request)
@@ -123,7 +126,7 @@ class ExploreController extends Controller
         }
 
         try {
-            $posts = $this->hashTagPost->getHashtagPosts($tag, 8);
+            $posts = $this->feedService->getHashtagPosts($tag, $user->id, 8);//hashTagPost->getHashtagPosts($tag, 8);
 
             return response()->json([
                 'success' => true,
@@ -188,5 +191,5 @@ class ExploreController extends Controller
         }
     }
 
-    
+
 }
