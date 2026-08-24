@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Post;
 use App\Models\PostVideo;
-use App\Services\Media\VideoProcessingService;
+use App\Services\VideoUploadService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -19,83 +19,64 @@ class ProcessPostVideo implements ShouldQueue
 
     public int $tries = 2;
     public int $timeout = 600;
+    public int $backoff = 30;
 
     public function __construct(
         public string $postVideoId,
         public string $localPath,
         public string $userId,
-        public int $maxSeconds,
-        public bool $includeHd,
-    ) {}
+        public string $level,
+    ) {
+        $this->onQueue('media');
+    }
 
-    public function handle(VideoProcessingService $service): void
+    public function handle(VideoUploadService $service): void
     {
         $record = PostVideo::find($this->postVideoId);
 
-        if (!$record) {
+        if (! $record) {
             @unlink($this->localPath);
             return;
         }
 
         try {
-            $duration = $service->probeDuration($this->localPath);
-
-            if ($this->maxSeconds > 0 && $duration > $this->maxSeconds + 1) {
-                $record->update([
-                    'processing_status' => 'failed',
-                    'failure_reason' => sprintf(
-                        'Video is %ds, longer than the %ds allowed on this plan',
-                        round($duration),
-                        $this->maxSeconds
-                    ),
-                ]);
-                return;
-            }
-
-            $data = $service->process($this->localPath, $this->userId, $this->includeHd);
+            $data = $service->upload($this->localPath, $this->level, $this->userId);
+            $versions = $data['quality_versions'] ?? [];
 
             $record->update([
-                'processing_status' => 'processing',
-                'path' => $data['sd'],                 // SD rendition — always generated
-                'hd_path' => $data['hd'] ?? null,       // Influencer-only extra rendition
-                'thumbnail_path' => $data['poster'],    // poster frame
+                'processing_status' => 'completed',
+                'path' => $data['url'],
+                'hd_path' => $versions['high'] ?? null,
+                'thumbnail_path' => $data['thumbnail'],
                 'duration' => $data['duration'],
                 'width' => $data['width'],
                 'height' => $data['height'],
-                'format' => 'webm',
-                'file_size' => $data['size_bytes'],
-                'quality_version' => $this->includeHd ? 'sd+hd' : 'sd',
+                'format' => $data['format'] ?? 'mp4',
+                'file_size' => $data['file_size'],
+                'public_id' => $data['public_id'] ?? null,
+                'quality_versions' => $versions,
                 'failure_reason' => null,
             ]);
-        
-            Post::where('id', $record->post_id)->update(['has_video' => true, 'media_status' => 'completed']);
 
-            if($record->failure_reason == null) {
-                $record->update(['processing_status' => 'completed']);
-            }
-            
+            Post::where('id', $record->post_id)->update([
+                'has_video' => true,
+                'media_status' => 'completed',
+            ]);
         } catch (Throwable $e) {
             Log::error('Video processing failed', [
                 'post_video_id' => $this->postVideoId,
                 'error' => $e->getMessage(),
-                'previous' => $e->getPrevious()?->getMessage(), // TEMP — this usually has ffmpeg's real stderr output
+                'previous' => $e->getPrevious()?->getMessage(),
             ]);
+
             $record->update([
                 'processing_status' => 'failed',
                 'failure_reason' => $e->getMessage(),
             ]);
+
+            Post::where('id', $record->post_id)->update(['media_status' => 'failed']);
         } finally {
             @unlink($this->localPath);
         }
-
-        // Log::error('Video processing failed', [
-        //     'post_video_id' => $this->postVideoId,
-        //     'error' => $e->getMessage(),
-        // ]);
-        // $record->update([
-        //     'processing_status' => 'failed',
-        //     'failure_reason' => $e->getMessage(),
-        // ]);
-
     }
 }

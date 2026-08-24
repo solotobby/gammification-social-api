@@ -175,15 +175,15 @@ class FeedController extends Controller
                 $rules['images.*'] = [
                     'image',
                     'mimes:jpg,jpeg,png,webp,heic,avif',
-                    'max:' . config('media_tiers.image.max_upload_kb'),
+                    'max:' . (int) config('media.image_max_kb', config('media_tiers.image.max_upload_kb')),
                 ];
             } else {
                 $rules['images'][] = 'prohibited';
             }
 
             if ($tier['video']['allowed']) {
-                $rules['video'][] = 'mimes:mp4,mov,webm,avi';
-                $rules['video'][] = 'max:' . (config('media_tiers.video.max_upload_mb') * 1024);
+                $rules['video'][] = 'mimetypes:'.app(\App\Services\VideoUploadService::class)->allowedMimetypes();
+                $rules['video'][] = 'max:' . app(\App\Services\VideoUploadService::class)->maxFileKb($level);
             } else {
                 $rules['video'][] = 'prohibited';
             }
@@ -288,8 +288,7 @@ class FeedController extends Controller
                     $queued['video']['id'],
                     $queued['video']['local'],
                     $user->id,
-                    $tier['video']['max_seconds'],
-                    $level === 'Influencer',
+                    $level,
                 )->afterCommit();
             }
 
@@ -404,7 +403,7 @@ class FeedController extends Controller
                 return response()->json(['success' => false, 'message' => 'Post not found'], 404);
             }
 
-            ProcessComment::dispatch($post->id, $user, $validated['comment']);
+            ProcessComment::dispatch($post->id, $user, $validated['comment'])->afterCommit();
 
             return response()->json([
                 'success' => true,
@@ -437,6 +436,8 @@ class FeedController extends Controller
             $viewerId = $user->id;
             $post = $this->feedService->getPost($postId, $viewerId);
             $comments = $this->feedService->getPostComments($postId, 10);
+
+            ProcessView::dispatch($postId, $viewerId)->afterCommit();
 
             return response()->json([
                 'success' => true,

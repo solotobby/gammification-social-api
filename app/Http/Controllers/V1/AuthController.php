@@ -359,16 +359,16 @@ class AuthController extends Controller
                 ->where('email', $request->email)
                 ->first();
 
-            if ($user->email_verified_at === null) {
-                return response()->json([
-                    'message' => 'Email address Not verified'
-                ], 401);
-            }
-
             // ❌ Avoid revealing whether email exists
             if (!$user || !Hash::check($request->password, $user->password)) {
                 return response()->json([
                     'message' => 'Invalid credentials'
+                ], 401);
+            }
+
+            if ($user->email_verified_at === null) {
+                return response()->json([
+                    'message' => 'Email address Not verified'
                 ], 401);
             }
 

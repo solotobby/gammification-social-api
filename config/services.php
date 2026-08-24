@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'env' => [
+        'kora_sec' => env('KORA_SEC'),
+        'kora_pub' => env('KORA_PUB'),
+        'kora_base_url' => env('KORA_BASE_URL', 'https://api.korapay.com/merchant/api/v1'),
+    ],
+
 ];

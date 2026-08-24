@@ -2,7 +2,6 @@
 
 namespace App\Jobs;
 
-use App\Models\Post;
 use App\Services\ViewService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -20,26 +19,18 @@ class ProcessView implements ShouldQueue
     public int $backoff = 5;
 
     public function __construct(
-        public string $post,
-        public string $user,
+        public string $postId,
+        public string $userId,
     ) {}
 
     public function handle(ViewService $viewService): void
     {
         try {
-
-
-            // Log::info('Processing view for post', [
-            //     'post' => $this->post,
-            //     'user' => $this->user,
-            // ]);
-
-            $viewService->recordView($this->post, $this->user);
-
+            $viewService->recordView($this->postId, $this->userId);
         } catch (Throwable $e) {
             Log::error('Failed to record view', [
-                // 'post_id' => $this->post,
-                // 'user_id' => $this->user,
+                'post_id' => $this->postId,
+                'user_id' => $this->userId,
                 'error' => $e->getMessage(),
             ]);
 

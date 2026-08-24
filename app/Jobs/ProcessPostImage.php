@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Post;
 use App\Models\PostImages;
-use App\Services\Media\ImageProcessingService;
+use App\Services\ImageUploadService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -19,50 +19,67 @@ class ProcessPostImage implements ShouldQueue
 
     public int $tries = 3;
     public int $backoff = 15;
+    public int $timeout = 120;
 
     public function __construct(
         public string $postImageId,
         public string $localPath,
         public string $userId,
-    ) {}
+    ) {
+        $this->onQueue('media');
+    }
 
-    public function handle(ImageProcessingService $service): void
+    public function handle(ImageUploadService $service): void
     {
         $record = PostImages::find($this->postImageId);
 
-        if (!$record) {
+        if (! $record) {
             @unlink($this->localPath);
             return;
         }
 
         try {
-            $data = $service->process($this->localPath, $this->userId);
+            $info = @getimagesize($this->localPath) ?: [null, null];
+            $url = $service->upload(
+                $this->localPath,
+                "payhankey_media/images/{$this->userId}",
+                $this->userId,
+            );
 
             $record->update([
                 'processing_status' => 'completed',
-                'thumbnail_path' => $data['thumb'],
-                'medium_path' => $data['medium'],
-                'full_path' => $data['full'],
-                'width' => $data['width'],
-                'height' => $data['height'],
-                'size_bytes' => $data['size_bytes'],
+                'path' => $url,
+                'thumbnail_path' => $url,
+                'medium_path' => $url,
+                'full_path' => $url,
+                'width' => $info[0],
+                'height' => $info[1],
+                'size_bytes' => @filesize($this->localPath) ?: null,
+                'failure_reason' => null,
             ]);
 
-            Post::where('id', $record->post_id)->update(['has_images' => true, 'media_status' => 'completed']);
-            if($record->failure_reason == null) {
-                $record->update(['processing_status' => 'completed']);
-            }
+            Post::where('id', $record->post_id)->update([
+                'has_images' => true,
+                'media_status' => 'completed',
+            ]);
+
             Log::info('Image processing completed', [
                 'post_image_id' => $this->postImageId,
             ]);
-
-
         } catch (Throwable $e) {
             Log::error('Image processing failed', [
                 'post_image_id' => $this->postImageId,
                 'error' => $e->getMessage(),
             ]);
-            $record->update(['status' => 'failed', 'failure_reason' => $e->getMessage()]);
+
+            $record->update([
+                'processing_status' => 'failed',
+                'failure_reason' => $e->getMessage(),
+            ]);
+
+            Post::where('id', $record->post_id)->update([
+                'media_status' => 'failed',
+            ]);
         } finally {
             @unlink($this->localPath);
         }

@@ -54,7 +54,7 @@ class TrendingHashTags
                 }])
                 ->with(['images' => function ($q) {
                     $q->where('processing_status', 'completed')
-                        ->select(['id', 'post_id', 'path', 'thumbnail_path', 'full_path', 'width', 'height']);
+                        ->select(['id', 'post_id', 'path', 'thumbnail_path', 'medium_path', 'full_path', 'width', 'height']);
                 }])
                 ->with(['postComments' => function ($q) {
                     $q->with('user:id,username,name')
@@ -79,7 +79,7 @@ class TrendingHashTags
                             'type' => 'video',
                             'sd_url' => $post->video->path,
                             'hd_url' => $post->video->hd_path,
-                            'poster_url' => $post->video->thumbnail_path,
+                            'thumbnail_url' => $post->video->thumbnail_path,
                             'duration' => $post->video->duration,
                             'width' => $post->video->width,
                             'height' => $post->video->height,
@@ -89,7 +89,7 @@ class TrendingHashTags
                             'type' => 'images',
                             'items' => $post->images->map(fn($img) => [
                                 'thumb_url' => $img->thumbnail_path,
-                                'medium_url' => $img->path,
+                                'medium_url' => $img->medium_path ?: $img->path,
                                 'full_url' => $img->full_path,
                                 'width' => $img->width,
                                 'height' => $img->height,

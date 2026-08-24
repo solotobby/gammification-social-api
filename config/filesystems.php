@@ -74,6 +74,15 @@ return [
 
             'url' => env('MEDIA_CDN'),
             'throw' => true,
+
+            // Cursor/sandbox injects HTTP(S)_PROXY; Spaces PutObject then returns a
+            // blank 403. Force direct egress so queue workers can upload media.
+            'http' => [
+                'curl' => [
+                    \CURLOPT_PROXY => '',
+                    \CURLOPT_NOPROXY => '*',
+                ],
+            ],
         ],
 
     ],

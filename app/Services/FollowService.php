@@ -56,6 +56,9 @@ class FollowService
         if (! $this->isUniqueViolation($e)) {
             throw $e;
         }
+
+        // Already following — do not inflate counts.
+        return $this->buildResult($authUser, $targetUser, following: true);
     }
 
     User::whereKey($authUser->id)->increment('following');

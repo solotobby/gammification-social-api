@@ -44,12 +44,15 @@ class UserController extends Controller
                 ], 401);
             }
 
+            $user->load('profile');
+
             return response()->json([
                 'success' => true,
                 'message' => 'User Resources',
                 'data' => [
                     'user' => new UserResource($user),
-                    'level' => $this->userservices->activeLevel($user)
+                    'level' => $this->userservices->activeLevel($user),
+                    'baseCurrency' => userBaseCurrency($user->id),
                 ],
             ], 200);
         } catch (Throwable $e) {
@@ -63,6 +66,65 @@ class UserController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Unable to fetch user profile at this time'
+            ], 500);
+        }
+    }
+
+    public function updateProfile(Request $request)
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        if ($request->has('gender') && is_string($request->input('gender'))) {
+            $request->merge(['gender' => strtolower(trim($request->input('gender')))]);
+        }
+
+        $validated = $request->validate([
+            'date_of_birth' => ['sometimes', 'nullable', 'date', 'before_or_equal:' . now()->subYears(13)->toDateString()],
+            'gender' => ['sometimes', 'nullable', 'in:male,female'],
+            'location' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'about' => ['sometimes', 'nullable', 'string', 'max:40'],
+        ], [
+            'date_of_birth.before_or_equal' => 'You must be at least 13 years old to use Payhankey.',
+        ]);
+
+        try {
+            $payload = [];
+            foreach (['date_of_birth', 'gender', 'location', 'about'] as $field) {
+                if (! array_key_exists($field, $validated)) {
+                    continue;
+                }
+
+                $value = $validated[$field];
+                $payload[$field] = is_string($value) && trim($value) === '' ? null : $value;
+            }
+
+            $profile = Profile::updateOrCreate(
+                ['user_id' => $user->id],
+                $payload
+            );
+
+            $user->setRelation('profile', $profile);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Profile updated',
+                'data' => [
+                    'user' => new UserResource($user),
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Failed to update profile', [
+                'user_id' => $user->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to update profile at this time',
             ], 500);
         }
     }
@@ -123,72 +185,31 @@ class UserController extends Controller
                 return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
             }
 
-           $profile = User::with('profile')->where('username', $username)->select(['id', 'avatar', 'name', 'username', 'followers', 'following', 'status'])->first();
-        
+            $profile = User::with('profile')->where('username', $username)->select(['id', 'avatar', 'name', 'username', 'followers', 'following', 'status'])->first();
+
+            if (! $profile) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found',
+                ], 404);
+            }
+
             $posts = $this->feedservice->getUserPosts($profile->id, $user->id, 8);
-            // $posts = Post::with(['user:id,username,name'])
-            //     ->where('user_id', $user->id)
-            //     ->with(['video' => function ($q) {
-            //         $q->where('processing_status', 'completed')
-            //             ->select(['id', 'post_id', 'path', 'hd_path', 'thumbnail_path', 'duration', 'width', 'height']);
-            //     }])
-            //     ->with(['images' => function ($q) {
-            //         $q->where('processing_status', 'completed')
-            //             ->select(['id', 'post_id', 'path', 'thumbnail_path', 'full_path', 'width', 'height']);
-            //     }])
-            //     ->with(['postComments' => function ($q) {
-            //         $q->with('user:id,username,name')
-            //             ->whereIn('id', function ($sub) {
-            //                 $sub->select('id')
-            //                     ->from(DB::raw('(SELECT id, post_id, ROW_NUMBER() OVER (PARTITION BY post_id ORDER BY created_at DESC) AS rn FROM comments) AS ranked'))
-            //                     ->where('rn', '<=', 3);
-            //             })
-            //             ->latest();
-            //     }])
-            //     ->where('status', 'LIVE')
-            //     ->latest('created_at')
-            //     ->select(['id', 'user_id', 'content', 'views', 'likes', 'comments', 'has_video', 'has_images', 'media_status', 'created_at'])
-            //     ->paginate(10);
 
-            // $posts->getCollection()->transform(function (Post $post) {
-            //     $post->media = null;
+            $totalPostsQuery = Post::where('user_id', $profile->id);
+            if ($user->id !== $profile->id) {
+                $totalPostsQuery->where('status', 'LIVE');
+            }
 
-            //     if ($post->media_status === 'completed') {
-            //         if ($post->has_video && $post->video) {
-            //             $post->media = [
-            //                 'type' => 'video',
-            //                 'sd_url' => $post->video->path,
-            //                 'hd_url' => $post->video->hd_path,
-            //                 'poster_url' => $post->video->thumbnail_path,
-            //                 'duration' => $post->video->duration,
-            //                 'width' => $post->video->width,
-            //                 'height' => $post->video->height,
-            //             ];
-            //         } elseif ($post->has_images && $post->images->isNotEmpty()) {
-            //             $post->media = [
-            //                 'type' => 'images',
-            //                 'items' => $post->images->map(fn($img) => [
-            //                     'thumb_url' => $img->thumbnail_path,
-            //                     'medium_url' => $img->path,
-            //                     'full_url' => $img->full_path,
-            //                     'width' => $img->width,
-            //                     'height' => $img->height,
-            //                 ])->values(),
-            //             ];
-            //         }
-            //     }
-
-            //     $post->comments_preview = $post->postComments->map(fn($c) => [
-            //         'id' => $c->id,
-            //         'user' => $c->user?->only(['id', 'username', 'name']),
-            //         'message' => $c->message,
-            //         'created_at' => $c->created_at,
-            //     ])->values();
-
-            //     unset($post->video, $post->images, $post->postComments);
-
-            //     return $post;
-            // });
+            return response()->json([
+                'success' => true,
+                'message' => 'User Profile fetched',
+                'level' => $this->userservices->activeLevel($profile),
+                'baseCurrency' => userBaseCurrency($profile->id),
+                'total_posts' => $totalPostsQuery->count(),
+                'profile' => $profile,
+                'data' => $posts,
+            ], 200);
         } catch (Throwable $e) {
 
             Log::error('Failed to fetch user', [
@@ -202,12 +223,6 @@ class UserController extends Controller
                 'message' => 'Unable to fetch user profile at this time'
             ], 500);
         }
-        return response()->json([
-            'success' => true,
-            'message' => 'User Profile fetched',
-            'profile' => $profile,
-            'data' => $posts
-        ], 200);
     }
 
     public function currency(Request $request)

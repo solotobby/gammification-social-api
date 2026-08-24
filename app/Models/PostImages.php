@@ -16,7 +16,7 @@ class PostImages extends Model
         'path',
         'type',
         'processing_status',
-        'thumb_path',
+        'thumbnail_path',
         'medium_path',
         'full_path',
         'width',
@@ -28,7 +28,7 @@ class PostImages extends Model
 
     public function post()
     {
-        return $this->hasOne(Post::class);
+        return $this->belongsTo(Post::class);
     }
 
     public function user()

@@ -108,9 +108,9 @@ class FeedService
             ->select(self::POST_SUMMARY_COLUMNS)
             ->with(['user:id,username,name,avatar'])
             ->with(['video' => fn ($q) => $q->where('processing_status', 'completed')
-                ->select(['id', 'post_id', 'path', 'hd_path', 'thumbnail_path', 'duration', 'width', 'height'])])
+                ->select(['id', 'post_id', 'path', 'hd_path', 'thumbnail_path', 'duration', 'width', 'height', 'format', 'quality_versions'])])
             ->with(['images' => fn ($q) => $q->where('processing_status', 'completed')
-                ->select(['id', 'post_id', 'path', 'thumbnail_path', 'full_path', 'width', 'height'])])
+                ->select(['id', 'post_id', 'path', 'thumbnail_path', 'medium_path', 'full_path', 'width', 'height'])])
             ->with(['likes' => fn ($q) => $this->latestPerPost($q, self::USER_LIKES_TABLE, self::LIKERS_PREVIEW_LIMIT)])
             ->when($viewerId, fn ($q) => $q->withExists([
                 'likes as is_liked_by_viewer' => fn ($sub) => $sub->where('user_id', $viewerId),
@@ -182,14 +182,20 @@ class FeedService
         }
 
         if ($post->has_video && $post->video) {
+            $versions = $post->video->quality_versions ?? [];
+
             return [
                 'type' => 'video',
-                'sd_url' => $post->video->path,
-                'hd_url' => $post->video->hd_path,
-                'poster_url' => $post->video->thumbnail_path,
+                'url' => $post->video->path,
+                'sd_url' => $versions['medium'] ?? $versions['low'] ?? $post->video->path,
+                'hd_url' => $versions['high'] ?? $post->video->hd_path,
+                'low_url' => $versions['low'] ?? null,
+                'quality_versions' => $versions,
+                'thumbnail_url' => $post->video->thumbnail_path,
                 'duration' => $post->video->duration,
                 'width' => $post->video->width,
                 'height' => $post->video->height,
+                'format' => $post->video->format,
             ];
         }
 
@@ -198,7 +204,7 @@ class FeedService
                 'type' => 'images',
                 'items' => $post->images->map(fn ($img) => [
                     'thumb_url' => $img->thumbnail_path,
-                    'medium_url' => $img->path,
+                    'medium_url' => $img->medium_path ?: $img->path,
                     'full_url' => $img->full_path,
                     'width' => $img->width,
                     'height' => $img->height,

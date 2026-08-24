@@ -3,8 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\User;
-use App\Services\Engagement\LikeService;
-use App\Services\LikeService as ServicesLikeService;
+use App\Services\LikeService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -43,7 +42,7 @@ class ProcessToggleLike implements ShouldQueue
         ];
     }
 
-    public function handle(ServicesLikeService $likeService): void
+    public function handle(LikeService $likeService): void
     {
         
         try {

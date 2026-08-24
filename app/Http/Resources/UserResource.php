@@ -27,7 +27,10 @@ class UserResource extends JsonResource
             'is_onboarded' => $this->is_onboarded,
             'status' => $this->status,
             'email_verified_at' => $this->email_verified_at,
-            // 'activeLevel' => 
+            'date_of_birth' => $this->profile?->date_of_birth?->format('Y-m-d'),
+            'gender' => $this->profile?->gender,
+            'location' => $this->profile?->location,
+            'about' => $this->profile?->about,
             'created_at' => $this->created_at,
 
             // 'level' => $this->whenLoaded('activeLevel', function () {
