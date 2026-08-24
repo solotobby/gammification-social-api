@@ -23,7 +23,7 @@ class VideoUploadService
 
     public function maxSeconds(string $level): int
     {
-        $level = normalizeUserLevel($level);
+        $level = $this->normalizeLevel($level);
         $configured = config("media.video_max_seconds.{$level}");
         $value = is_numeric($configured) ? (int) $configured : 0;
 
@@ -32,7 +32,7 @@ class VideoUploadService
 
     public function maxFileKb(string $level): int
     {
-        $level = normalizeUserLevel($level);
+        $level = $this->normalizeLevel($level);
         $configured = config("media.video_max_kb.{$level}");
         $value = is_numeric($configured) ? (int) $configured : 0;
 
@@ -133,9 +133,9 @@ class VideoUploadService
      */
     private function process(string $sourcePath, string $level, ?string $userId, string $token): array
     {
-        $level = normalizeUserLevel($level);
+        $level = $this->normalizeLevel($level);
 
-        if (! canUploadVideo($level)) {
+        if ($level !== 'Influencer') {
             throw new \RuntimeException('Only Influencer accounts can upload rolls.');
         }
 
@@ -501,5 +501,17 @@ class VideoUploadService
             'status' => 'processing',
             'progress' => min(95, max(15, $progress)),
         ]), config('media.upload_cache_ttl', 3600));
+    }
+
+    private function normalizeLevel(?string $level): string
+    {
+        $level = trim((string) $level);
+
+        return match (strtolower($level)) {
+            'influencer' => 'Influencer',
+            'creator' => 'Creator',
+            'basic' => 'Basic',
+            default => $level !== '' ? $level : 'Basic',
+        };
     }
 }
