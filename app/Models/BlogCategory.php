@@ -11,5 +11,9 @@ class BlogCategory extends Model
     use HasFactory, UuidTrait;
 
     protected $fillable = ['name'];
-    
+
+    public function blogs()
+    {
+        return $this->hasMany(Blog::class, 'blog_category_id');
+    }
 }

@@ -65,7 +65,10 @@ class UserController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Unable to fetch user profile at this time'
+                'message' => 'Unable to fetch user profile at this time',
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'user_id' => optional($request->user())->id,
             ], 500);
         }
     }
@@ -86,7 +89,7 @@ class UserController extends Controller
             'date_of_birth' => ['sometimes', 'nullable', 'date', 'before_or_equal:' . now()->subYears(13)->toDateString()],
             'gender' => ['sometimes', 'nullable', 'in:male,female'],
             'location' => ['sometimes', 'nullable', 'string', 'max:50'],
-            'about' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'about' => ['sometimes', 'nullable', 'string', 'max:160'],
         ], [
             'date_of_birth.before_or_equal' => 'You must be at least 13 years old to use Payhankey.',
         ]);

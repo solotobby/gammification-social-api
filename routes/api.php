@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\V1\AuthController;
+use App\Http\Controllers\V1\Blog\BlogController;
 use App\Http\Controllers\V1\Earnings\AnalyticsController;
 use App\Http\Controllers\V1\Explore\ExploreController;
 use App\Http\Controllers\V1\Rolls\RollsController;
@@ -47,6 +48,11 @@ Route::prefix('v1')->group(function () {
 
     Route::post('/logout', [AuthController::class, 'logout'])
         ->middleware(['auth:api,web', 'throttle:60,1']);
+
+    Route::prefix('blogs')->group(function () {
+        Route::get('/', [BlogController::class, 'index']);
+        Route::get('/{slug}', [BlogController::class, 'show']);
+    });
 
     Route::middleware('auth:api,web')->group(function () {
 
