@@ -28,6 +28,8 @@ class PostVideo extends Model
         'view_count',
         'play_count',
         'avg_watch_time',
+        'total_watch_time',
+        'watch_sessions',
         'hd_path',
         'failure_reason',
     ];
@@ -41,6 +43,8 @@ class PostVideo extends Model
         'view_count' => 'integer',
         'play_count' => 'integer',
         'avg_watch_time' => 'decimal:2',
+        'total_watch_time' => 'decimal:2',
+        'watch_sessions' => 'integer',
     ];
 
     /**
@@ -107,16 +111,25 @@ class PostVideo extends Model
     }
 
     /**
-     * Update average watch time
+     * Record a watch segment and keep total + average watch time in sync.
      */
-    public function updateWatchTime($watchTime)
+    public function updateWatchTime(float $watchTime): void
     {
-        $totalWatchTime = ($this->avg_watch_time * $this->play_count) + $watchTime;
-        $newPlayCount = $this->play_count + 1;
-        
+        if ($watchTime < 0.25) {
+            return;
+        }
+
+        $this->refresh();
+
+        $sessions = max(0, (int) ($this->watch_sessions ?? 0));
+        $total = (float) ($this->total_watch_time ?? 0) + $watchTime;
+        $newSessions = $sessions + 1;
+        $avg = $newSessions > 0 ? round($total / $newSessions, 2) : round($watchTime, 2);
+
         $this->update([
-            'avg_watch_time' => $totalWatchTime / $newPlayCount,
-            'play_count' => $newPlayCount,
+            'total_watch_time' => round($total, 2),
+            'watch_sessions' => $newSessions,
+            'avg_watch_time' => $avg,
         ]);
     }
 

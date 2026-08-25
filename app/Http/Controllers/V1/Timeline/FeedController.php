@@ -25,6 +25,9 @@ use Illuminate\Support\Str;
 use App\Models\PostImages;
 use App\Models\PostVideo;
 use App\Services\FeedService;
+use App\Services\PostUpdateService;
+use App\Services\VideoUploadService;
+use App\Support\StoredMedia;
 
 class FeedController extends Controller
 {
@@ -32,15 +35,19 @@ class FeedController extends Controller
     protected UserServices $userServices;
     protected HashTagServices $hashtagservices;
     protected FeedService $feedService;
+    protected PostUpdateService $postUpdateService;
 
 
-    public function __construct(UserServices $userServices, HashTagServices $hashtagservices, FeedService $feedService)
-    {
+    public function __construct(
+        UserServices $userServices,
+        HashTagServices $hashtagservices,
+        FeedService $feedService,
+        PostUpdateService $postUpdateService,
+    ) {
         $this->userServices = $userServices;
         $this->hashtagservices = $hashtagservices;
         $this->feedService = $feedService;
-        // $this->middleware('auth');
-        // throw new \Exception('Not implemented');
+        $this->postUpdateService = $postUpdateService;
     }
 
 
@@ -505,6 +512,145 @@ class FeedController extends Controller
     //     }
     // }
 
+    public function updatePost(Request $request, string $postId)
+    {
+        try {
+            $user = $request->user();
+            if (! $user) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+            }
+
+            $post = Post::where('id', $postId)->where('user_id', $user->id)->firstOrFail();
+            $level = $this->userServices->activeLevel($user);
+            $tier = config("media_tiers.tiers.{$level}", config('media_tiers.tiers.default'));
+
+            $rules = [
+                'content' => ['sometimes', 'required', 'string'],
+                'images' => ['nullable', 'array'],
+                'video' => ['nullable', 'file'],
+                'remove_image_ids' => ['sometimes', 'array'],
+                'remove_image_ids.*' => ['uuid'],
+                'remove_video' => ['sometimes', 'boolean'],
+            ];
+
+            if (! in_array($level, ['Creator', 'Influencer'])) {
+                $rules['content'][] = 'max:160';
+            }
+
+            if ($tier['images']['allowed']) {
+                $rules['images'][] = 'max:' . $tier['images']['max'];
+                $rules['images.*'] = [
+                    'image',
+                    'mimes:jpg,jpeg,png,webp,heic,avif',
+                    'max:' . (int) config('media.image_max_kb', config('media_tiers.image.max_upload_kb')),
+                ];
+            } else {
+                $rules['images'][] = 'prohibited';
+            }
+
+            if ($tier['video']['allowed']) {
+                $rules['video'][] = 'mimetypes:' . app(VideoUploadService::class)->allowedMimetypes();
+                $rules['video'][] = 'max:' . app(VideoUploadService::class)->maxFileKb($level);
+            } else {
+                $rules['video'][] = 'prohibited';
+            }
+
+            $validated = $request->validate($rules);
+
+            $hasChanges = $request->has('content')
+                || $request->hasFile('images')
+                || $request->hasFile('video')
+                || $request->has('remove_image_ids')
+                || $request->boolean('remove_video');
+
+            if (! $hasChanges) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Nothing to update',
+                ], 422);
+            }
+
+            if ($request->has('content')) {
+                $content = $this->postUpdateService->normalizeContent($validated['content']);
+
+                if ($content === '') {
+                    return response()->json(['success' => false, 'message' => 'Post content cannot be empty'], 422);
+                }
+
+                $previousPosts = Post::where('user_id', $user->id)
+                    ->where('id', '!=', $post->id)
+                    ->pluck('content')
+                    ->toArray();
+
+                if ($this->isSimilar($content, $previousPosts, 4)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This content is too similar to an existing post',
+                    ], 422);
+                }
+
+                $validated['content'] = $content;
+            }
+
+            $result = $this->postUpdateService->update(
+                $post,
+                $user->id,
+                $level,
+                $validated,
+                $request->file('images', []),
+                $request->file('video'),
+            );
+
+            foreach ($result['queued']['images'] as $img) {
+                ProcessPostImage::dispatch($img['id'], $img['local'], $user->id)->afterCommit();
+            }
+
+            if ($result['queued']['video']) {
+                ProcessPostVideo::dispatch(
+                    $result['queued']['video']['id'],
+                    $result['queued']['video']['local'],
+                    $user->id,
+                    $level,
+                )->afterCommit();
+            }
+
+            $message = (count($result['queued']['images']) > 0 || $result['queued']['video'])
+                ? 'Post updated — new media is processing and will appear shortly'
+                : 'Post updated successfully';
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'data' => [
+                    'post_id' => $result['post']->id,
+                    'media_status' => $result['media_status'],
+                ],
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Post not found',
+            ], 404);
+        } catch (Throwable $e) {
+            Log::error('Failed to update post', [
+                'post_id' => $postId,
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'There was an error while updating post',
+                'error_temp' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function deletePost(Request $request, $postId)
     {
         try {
@@ -513,17 +659,45 @@ class FeedController extends Controller
                 return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
             }
 
-            $post = Post::where('id', $postId)->where('user_id', $user->id)->firstOrFail();
+            $post = Post::where('id', $postId)
+                ->where('user_id', $user->id)
+                ->with(['images', 'video'])
+                ->firstOrFail();
 
-            $post->delete();
+            DB::transaction(function () use ($post) {
+                foreach ($post->images as $image) {
+                    foreach (['path', 'thumbnail_path', 'medium_path', 'full_path'] as $field) {
+                        StoredMedia::delete($image->{$field});
+                    }
+                    $image->delete();
+                }
 
-            PostImages::where('post_id', $postId)->delete();
-            PostVideo::where('post_id', $postId)->delete();
+                if ($post->video) {
+                    StoredMedia::delete($post->video->path);
+                    StoredMedia::delete($post->video->hd_path);
+                    StoredMedia::delete($post->video->thumbnail_path);
+
+                    if (is_array($post->video->quality_versions)) {
+                        foreach ($post->video->quality_versions as $url) {
+                            StoredMedia::delete($url);
+                        }
+                    }
+
+                    $post->video->forceDelete();
+                }
+
+                $post->delete();
+            });
 
             return response()->json([
                 'success' => true,
                 'message' => 'Post deleted successfully',
             ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Post not found',
+            ], 404);
         } catch (Throwable $e) {
             Log::error('Failed to delete post', [
                 'message' => $e->getMessage(),

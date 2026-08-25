@@ -5,14 +5,17 @@ namespace App\Services;
 use App\Models\Comment;
 use App\Models\Hashtag;
 use App\Models\Post;
+use App\Models\PostBookmark;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class FeedService
 {
+    public function __construct(protected PostEarningsService $earningsService) {}
+
     private const COMMENTS_PREVIEW_LIMIT = 3;
     private const LIKERS_PREVIEW_LIMIT = 3;
 
@@ -31,9 +34,7 @@ class FeedService
             ->latest('created_at')
             ->paginate($perPage);
 
-        $posts->getCollection()->transform(fn (Post $post) => $this->transformPost($post, includeCommentsPreview: true));
-
-        return $posts;
+        return $this->transformPage($posts, $viewerId);
     }
 
     public function getPost(string $postId, ?string $viewerId): Post
@@ -42,7 +43,10 @@ class FeedService
             ->where('status', 'LIVE')
             ->findOrFail($postId);
 
-        return $this->transformPost($post, includeCommentsPreview: false);
+        return $this->applyEarnings(
+            collect([$this->transformPost($post, includeCommentsPreview: false)]),
+            $viewerId,
+        )->first();
     }
 
     public function getPostComments(string $postId, int $perPage = 10): LengthAwarePaginator
@@ -76,9 +80,7 @@ class FeedService
 
         $posts = $query->latest('created_at')->paginate($perPage);
 
-        $posts->getCollection()->transform(fn (Post $post) => $this->transformPost($post, includeCommentsPreview: true));
-
-        return $posts;
+        return $this->transformPage($posts, $viewerId);
     }
 
     /**
@@ -97,9 +99,83 @@ class FeedService
             ->latest('created_at')
             ->paginate($perPage);
 
-        $posts->getCollection()->transform(fn (Post $post) => $this->transformPost($post, includeCommentsPreview: true));
+        return $this->transformPage($posts, $viewerId);
+    }
+
+    public function getBookmarkedPosts(string $userId, int $perPage = 10): LengthAwarePaginator
+    {
+        $bookmarks = PostBookmark::query()
+            ->where('user_id', $userId)
+            ->latest('created_at')
+            ->paginate($perPage);
+
+        $postIds = $bookmarks->pluck('post_id')->filter()->values();
+
+        if ($postIds->isEmpty()) {
+            $bookmarks->setCollection(collect());
+
+            return $bookmarks;
+        }
+
+        $postsById = $this->baseQuery($userId, withCommentsPreview: true)
+            ->whereIn('id', $postIds)
+            ->where('status', 'LIVE')
+            ->get()
+            ->keyBy('id');
+
+        $bookmarkTimes = $bookmarks->getCollection()->keyBy('post_id');
+
+        $ordered = $postIds
+            ->map(function (string $postId) use ($postsById, $bookmarkTimes) {
+                $post = $postsById->get($postId);
+
+                if (! $post) {
+                    return null;
+                }
+
+                $transformed = $this->transformPost($post, includeCommentsPreview: true);
+                $transformed->is_bookmarked = true;
+                $transformed->bookmarked_at = $bookmarkTimes->get($postId)?->created_at;
+
+                return $transformed;
+            })
+            ->filter()
+            ->values();
+
+        $bookmarks->setCollection(
+            $this->applyEarnings($ordered, $userId)
+        );
+
+        return $bookmarks;
+    }
+
+    protected function transformPage(LengthAwarePaginator $posts, ?string $viewerId): LengthAwarePaginator
+    {
+        $posts->setCollection(
+            $this->applyEarnings(
+                $posts->getCollection()->map(fn (Post $post) => $this->transformPost($post, includeCommentsPreview: true)),
+                $viewerId,
+            )
+        );
 
         return $posts;
+    }
+
+    protected function applyEarnings(Collection $posts, ?string $viewerId): Collection
+    {
+        if ($posts->isEmpty()) {
+            return $posts;
+        }
+
+        $currencyCode = strtoupper($viewerId ? (userBaseCurrency($viewerId) ?? 'USD') : 'USD');
+        $earnings = $this->earningsService->forPosts($posts->pluck('id'), $currencyCode);
+
+        return $posts->map(function (Post $post) use ($earnings, $currencyCode, $viewerId) {
+            $post->estimatedEarnings = $earnings[$post->id] ?? 0.0;
+            $post->currencySymbol = currencySymbol($currencyCode, $viewerId);
+
+            return $post;
+        });
     }
 
     protected function baseQuery(?string $viewerId, bool $withCommentsPreview): Builder
@@ -114,6 +190,7 @@ class FeedService
             ->with(['likes' => fn ($q) => $this->latestPerPost($q, self::USER_LIKES_TABLE, self::LIKERS_PREVIEW_LIMIT)])
             ->when($viewerId, fn ($q) => $q->withExists([
                 'likes as is_liked_by_viewer' => fn ($sub) => $sub->where('user_id', $viewerId),
+                'bookmarks as is_bookmarked' => fn ($sub) => $sub->where('user_id', $viewerId),
             ]));
 
         if ($withCommentsPreview) {
@@ -152,6 +229,7 @@ class FeedService
         }
 
         $post->is_liked_by_viewer = (bool) ($post->is_liked_by_viewer ?? false);
+        $post->is_bookmarked = (bool) ($post->is_bookmarked ?? false);
 
         // Raw 'likes' count column stays intact — build the preview from the
         // relation, then only strip the RELATION (not the attribute) below.

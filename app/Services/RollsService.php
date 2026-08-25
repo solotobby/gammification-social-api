@@ -9,12 +9,112 @@ use App\Models\PostVideo;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class RollsService
 {
     public const PER_PAGE = 5;
 
+    public const TOP_LIMIT = 5;
+
     public const COMMENTS_PER_PAGE = 5;
+
+    /**
+     * Top 5 completed rolls ranked by a combined engagement score:
+     * views + likes + comments + (play_count × 2) + avg_watch_time.
+     *
+     * @return list<array>
+     */
+    public function getTopRolls(?string $viewerId, int $limit = self::TOP_LIMIT): array
+    {
+        $scoreExpression = '(
+            COALESCE(posts.views, 0)
+            + COALESCE(posts.likes, 0)
+            + COALESCE(posts.comments, 0)
+            + (COALESCE(post_videos.play_count, 0) * 2)
+            + COALESCE(post_videos.avg_watch_time, 0)
+        )';
+
+        $posts = $this->baseQuery($viewerId)
+            ->join('post_videos', 'post_videos.post_id', '=', 'posts.id')
+            ->where('post_videos.processing_status', 'completed')
+            ->whereNotNull('post_videos.path')
+            ->addSelect(DB::raw("{$scoreExpression} AS engagement_score"))
+            ->orderByDesc('engagement_score')
+            ->orderByDesc('posts.created_at')
+            ->limit($limit)
+            ->get();
+
+        return $posts
+            ->values()
+            ->map(fn (Post $post, int $index) => $this->transformTopRoll($post, $index + 1))
+            ->all();
+    }
+
+    protected function transformTopRoll(Post $post, int $rank): array
+    {
+        $video = $post->video;
+        $versions = $video?->quality_versions ?? [];
+
+        return [
+            'rank' => $rank,
+            'post_id' => $post->id,
+            'video_id' => $video?->id,
+            'user' => $post->user?->only(['id', 'username', 'name', 'avatar']),
+            'media' => $video ? [
+                'type' => 'video',
+                'url' => $video->path,
+                'sd_url' => $versions['medium'] ?? $versions['low'] ?? $video->path,
+                'hd_url' => $versions['high'] ?? $video->hd_path,
+                'low_url' => $versions['low'] ?? null,
+                'quality_versions' => $versions,
+                'thumbnail_url' => $video->thumbnail_path,
+                'duration' => $video->duration,
+                'width' => $video->width,
+                'height' => $video->height,
+                'format' => $video->format,
+            ] : null,
+        ];
+    }
+
+    /**
+     * Record a play for a roll video.
+     */
+    public function recordPlay(string $videoId): PostVideo
+    {
+        $video = PostVideo::query()
+            ->where('id', $videoId)
+            ->where('processing_status', 'completed')
+            ->whereHas('post', fn ($q) => $q->where('status', 'LIVE'))
+            ->firstOrFail();
+
+        $video->incrementPlays();
+
+        return $video->fresh();
+    }
+
+    /**
+     * Record watch time (seconds) for a roll video.
+     */
+    public function recordWatch(string $videoId, float $watchSeconds, bool $countAsPlay = false): PostVideo
+    {
+        $video = PostVideo::query()
+            ->where('id', $videoId)
+            ->where('processing_status', 'completed')
+            ->whereHas('post', fn ($q) => $q->where('status', 'LIVE'))
+            ->firstOrFail();
+
+        if ($countAsPlay) {
+            $video->incrementPlays();
+            $video->refresh();
+        }
+
+        if ($watchSeconds >= 0.25) {
+            $video->updateWatchTime($watchSeconds);
+        }
+
+        return $video->fresh();
+    }
 
     /**
      * Random completed video posts for the rolls feed.
@@ -111,7 +211,7 @@ class RollsService
                 ->select([
                     'id', 'post_id', 'path', 'hd_path', 'thumbnail_path',
                     'duration', 'width', 'height', 'format', 'quality_versions',
-                    'view_count', 'play_count',
+                    'view_count', 'play_count', 'avg_watch_time',
                 ])])
             ->when($viewerId, fn ($q) => $q->withExists([
                 'likes as is_liked_by_viewer' => fn ($sub) => $sub->where('user_id', $viewerId),
@@ -146,12 +246,12 @@ class RollsService
     /**
      * @param  array<string, true>  $followingIds
      */
-    protected function transformRoll(Post $post, ?string $viewerId, array $followingIds): array
+    protected function transformRoll(Post $post, ?string $viewerId, array $followingIds, bool $withMetrics = false): array
     {
         $video = $post->video;
         $versions = $video?->quality_versions ?? [];
 
-        return [
+        $roll = [
             'video_id' => $video?->id,
             'post_id' => $post->id,
             'content' => $post->content,
@@ -159,6 +259,10 @@ class RollsService
             'comments' => (int) $post->comments,
             'views' => (int) $post->views,
             'video_views' => (int) ($video?->view_count ?? 0),
+            'play_count' => (int) ($video?->play_count ?? 0),
+            'avg_watch_time' => $video?->avg_watch_time !== null
+                ? round((float) $video->avg_watch_time, 2)
+                : null,
             'is_liked_by_viewer' => (bool) ($post->is_liked_by_viewer ?? false),
             'is_following' => $viewerId !== null
                 && $post->user_id !== $viewerId
@@ -179,5 +283,22 @@ class RollsService
             ] : null,
             'created_at' => $post->created_at,
         ];
+
+        if ($withMetrics) {
+            $roll['metrics'] = [
+                'reactions' => [
+                    'views' => (int) $post->views,
+                    'likes' => (int) $post->likes,
+                    'comments' => (int) $post->comments,
+                    'total' => (int) $post->views + (int) $post->likes + (int) $post->comments,
+                ],
+                'play_count' => (int) ($video?->play_count ?? 0),
+                'avg_watch_time' => $video?->avg_watch_time !== null
+                    ? round((float) $video->avg_watch_time, 2)
+                    : null,
+            ];
+        }
+
+        return $roll;
     }
 }

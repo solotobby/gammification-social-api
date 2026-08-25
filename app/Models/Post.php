@@ -186,4 +186,9 @@ class Post extends Model
             'hashtag_id'
         );
     }
+
+    public function bookmarks()
+    {
+        return $this->hasMany(PostBookmark::class);
+    }
 }

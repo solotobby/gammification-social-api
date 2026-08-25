@@ -1,6 +1,10 @@
 <?php
 
+use App\Models\Currency;
 use App\Models\User;
+use App\Models\UserComment;
+use App\Models\UserLike;
+use App\Models\UserView;
 use App\Models\Wallet;
 
 if (! function_exists('normalizeUserLevel')) {
@@ -77,5 +81,98 @@ if (! function_exists('bankList')) {
         ])->get($url)->throw();
 
         return json_decode($res->getBody()->getContents(), true)['data'] ?? [];
+    }
+}
+
+if (! function_exists('currencySymbol')) {
+    function currencySymbol(?string $currency = null, ?string $userId = null): string
+    {
+        $currency = strtoupper($currency ?? userBaseCurrency($userId) ?? 'USD');
+
+        $symbols = Currency::query()
+            ->where('is_active', true)
+            ->get(['code', 'symbol'])
+            ->mapWithKeys(fn ($row) => [strtoupper((string) $row->code) => (string) $row->symbol])
+            ->all();
+
+        $fallbacks = [
+            'USD' => '$',
+            'NGN' => '₦',
+            'EUR' => '€',
+            'GBP' => '£',
+        ];
+
+        return $symbols[$currency] ?? $fallbacks[$currency] ?? '$';
+    }
+}
+
+if (! function_exists('convertToBaseCurrency')) {
+    function convertToBaseCurrency($amount, $currency): float
+    {
+        $rates = Currency::where('is_active', true)->pluck('base_rate', 'code')->toArray();
+        $rate = $rates[strtoupper((string) $currency)] ?? 1;
+
+        return (float) $amount * (float) $rate;
+    }
+}
+
+if (! function_exists('estimatedEarnings')) {
+    function estimatedEarnings($postId, ?string $currency = null): float
+    {
+        if (! $postId) {
+            return 0.0;
+        }
+
+        $currency = strtoupper($currency ?? userBaseCurrency() ?? 'USD');
+        $since = now()->subDays(30);
+
+        $total = (float) UserView::where('post_id', $postId)->where('created_at', '>=', $since)->sum('amount')
+            + (float) UserLike::where('post_id', $postId)->where('created_at', '>=', $since)->sum('amount')
+            + (float) UserComment::where('post_id', $postId)->where('created_at', '>=', $since)->sum('amount');
+
+        return (float) round(convertToBaseCurrency($total, $currency), 5);
+    }
+}
+
+
+if (! function_exists('viewsAmountCalculator')) {
+    function viewsAmountCalculator($postId, ?string $userId = null): float
+    {
+        if (! $postId) {
+            return 0.0;
+        }
+
+        $currency = userBaseCurrency($userId) ?? 'USD';
+        $viewsEarnings = (float) UserView::where('post_id', $postId)->sum('amount');
+
+        return (float) round(convertToBaseCurrency($viewsEarnings, $currency), 5);
+    }
+}
+
+if (! function_exists('likesAmountCalculator')) {
+    function likesAmountCalculator($postId, ?string $userId = null): float
+    {
+        if (! $postId) {
+            return 0.0;
+        }
+
+        $currency = userBaseCurrency($userId) ?? 'USD';
+        $likesEarnings = (float) UserLike::where('post_id', $postId)->sum('amount');
+
+        return (float) round(convertToBaseCurrency($likesEarnings, $currency), 5);
+    }
+}
+
+if (! function_exists('commentsAmountCalculator')) {
+    function commentsAmountCalculator($postId, ?string $userId = null): float
+    {
+        if (! $postId) {
+            return 0.0;
+        }
+
+        $currency = userBaseCurrency($userId) ?? 'USD';
+        $commentsEarnings = (float) UserComment::where('post_id', $postId)->sum('amount');
+
+        return (float) round(convertToBaseCurrency($commentsEarnings, $currency), 5);
     }
 }

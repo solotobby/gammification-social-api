@@ -5,12 +5,15 @@ use App\Http\Controllers\V1\Blog\BlogController;
 use App\Http\Controllers\V1\Earnings\AnalyticsController;
 use App\Http\Controllers\V1\Explore\ExploreController;
 use App\Http\Controllers\V1\Rolls\RollsController;
+use App\Http\Controllers\V1\Timeline\BookmarkController;
 use App\Http\Controllers\V1\Timeline\FeedController;
+use App\Http\Controllers\V1\Timeline\PostAnalyticsController;
 use App\Http\Controllers\V1\User\BankInformationController;
 use App\Http\Controllers\V1\User\ReferralController;
 use App\Http\Controllers\V1\User\SocialController;
 use App\Http\Controllers\V1\User\TransactionController;
 use App\Http\Controllers\V1\User\UserController;
+use App\Http\Controllers\V1\User\WalletController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -72,6 +75,7 @@ Route::prefix('v1')->group(function () {
             Route::put('/bank', [BankInformationController::class, 'update']);
             Route::get('/transactions', [TransactionController::class, 'index']);
             Route::get('/referrals', [ReferralController::class, 'index']);
+            Route::get('/wallet', [WalletController::class, 'show']);
         });
 
         Route::prefix('explore')->group(function () {
@@ -83,20 +87,28 @@ Route::prefix('v1')->group(function () {
 
         Route::prefix('timeline')->group(function () {
             Route::get('/feed', [FeedController::class, 'feed']);
+            Route::get('/bookmarks', [BookmarkController::class, 'index']);
+            Route::post('/bookmark/toggle', [BookmarkController::class, 'toggle']);
             Route::post('/post', [FeedController::class, 'createPost']);
+            Route::match(['put', 'patch', 'post'], '/post/{postId}', [FeedController::class, 'updatePost']);
             Route::post('/like/toggle', [FeedController::class, 'toggleLikePost']);
             Route::post('/comment', [FeedController::class, 'postComment']);
             Route::get('/post/{postId}', [FeedController::class, 'viewPost']);
+            Route::get('/post/{postId}/analytics', [PostAnalyticsController::class, 'show']);
             Route::delete('/delete/post/{postId}', [FeedController::class, 'deletePost']);
         });
 
         Route::prefix('rolls')->group(function () {
             Route::get('/', [RollsController::class, 'index']);
+            Route::get('/top', [RollsController::class, 'top']);
+            Route::post('/{videoId}/play', [RollsController::class, 'recordPlay']);
+            Route::post('/{videoId}/watch', [RollsController::class, 'recordWatch']);
             Route::get('/{videoId}/comments', [RollsController::class, 'comments']);
             Route::get('/{videoId}', [RollsController::class, 'show']);
         });
 
         Route::prefix('earnings')->group(function () {
+            Route::get('/overview', [AnalyticsController::class, 'overview']);
             Route::get('/analytics/monthly', [AnalyticsController::class, 'monthly']);
             Route::get('/analytics/yearly', [AnalyticsController::class, 'yearly']);
         });

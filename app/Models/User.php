@@ -85,6 +85,17 @@ class User extends Authenticatable
         return $this->hasOne(Social::class, 'user_id');
     }
 
+    public function bookmarks()
+    {
+        return $this->hasMany(PostBookmark::class);
+    }
+
+    public function bookmarkedPosts()
+    {
+        return $this->belongsToMany(Post::class, 'post_bookmarks', 'user_id', 'post_id')
+            ->withTimestamps();
+    }
+
     public function scopeWithPostStatsByUsername(Builder $query, string $username)
     {
         return $query->where('username', $username)

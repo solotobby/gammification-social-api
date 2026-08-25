@@ -54,4 +54,36 @@ class HashTagServices
             'score' => 1,
         ]);
     }
+
+    public function sync(Post $post, string $text): void
+    {
+        $newTagNames = $this->extract($text)
+            ->map(fn (string $tag) => strtolower($tag))
+            ->unique()
+            ->values();
+
+        $attachedIds = PostHashTag::query()
+            ->where('post_id', $post->id)
+            ->pluck('hashtag_id');
+
+        $attachedTags = Hashtag::query()
+            ->whereIn('id', $attachedIds)
+            ->get(['id', 'name', 'posts_count']);
+
+        foreach ($attachedTags as $hashtag) {
+            $name = strtolower((string) $hashtag->name);
+
+            if ($name !== '' && ! $newTagNames->contains($name)) {
+                PostHashTag::where('post_id', $post->id)
+                    ->where('hashtag_id', $hashtag->id)
+                    ->delete();
+
+                if ($hashtag->posts_count > 0) {
+                    $hashtag->decrement('posts_count');
+                }
+            }
+        }
+
+        $this->attach($post, $text);
+    }
 }
