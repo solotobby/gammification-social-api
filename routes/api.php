@@ -2,11 +2,15 @@
 
 use App\Http\Controllers\V1\AuthController;
 use App\Http\Controllers\V1\Blog\BlogController;
+use App\Http\Controllers\V1\Community\CommunityController;
+use App\Http\Controllers\V1\Community\CommunityMembershipController;
+use App\Http\Controllers\V1\Community\CommunityPostController;
 use App\Http\Controllers\V1\Earnings\AnalyticsController;
 use App\Http\Controllers\V1\Explore\ExploreController;
 use App\Http\Controllers\V1\Rolls\RollsController;
 use App\Http\Controllers\V1\Timeline\BookmarkController;
 use App\Http\Controllers\V1\Timeline\FeedController;
+use App\Http\Controllers\V1\Timeline\PostActionController;
 use App\Http\Controllers\V1\Timeline\PostAnalyticsController;
 use App\Http\Controllers\V1\User\BankInformationController;
 use App\Http\Controllers\V1\User\ReferralController;
@@ -89,6 +93,8 @@ Route::prefix('v1')->group(function () {
             Route::get('/feed', [FeedController::class, 'feed']);
             Route::get('/bookmarks', [BookmarkController::class, 'index']);
             Route::post('/bookmark/toggle', [BookmarkController::class, 'toggle']);
+            Route::post('/post/hide', [PostActionController::class, 'hide']);
+            Route::post('/post/report', [PostActionController::class, 'report']);
             Route::post('/post', [FeedController::class, 'createPost']);
             Route::match(['put', 'patch', 'post'], '/post/{postId}', [FeedController::class, 'updatePost']);
             Route::post('/like/toggle', [FeedController::class, 'toggleLikePost']);
@@ -111,6 +117,37 @@ Route::prefix('v1')->group(function () {
             Route::get('/overview', [AnalyticsController::class, 'overview']);
             Route::get('/analytics/monthly', [AnalyticsController::class, 'monthly']);
             Route::get('/analytics/yearly', [AnalyticsController::class, 'yearly']);
+        });
+
+        Route::prefix('communities')->group(function () {
+            Route::get('/categories', [CommunityController::class, 'categories']);
+            Route::get('/', [CommunityController::class, 'index']);
+            Route::post('/', [CommunityController::class, 'store']);
+
+            Route::post('/invites/{token}/accept', [CommunityMembershipController::class, 'acceptInviteByToken']);
+            
+            Route::get('/s/{slug}', [CommunityController::class, 'showBySlug']);
+            Route::post('/s/{slug}/join', [CommunityController::class, 'joinBySlug']);
+            Route::get('/{id}', [CommunityController::class, 'show'])->whereUuid('id');
+
+            Route::get('/{id}/posts', [CommunityPostController::class, 'index'])->whereUuid('id');
+            Route::post('/{id}/posts', [CommunityPostController::class, 'store'])->whereUuid('id');
+            Route::get('/{id}/posts/{postId}/comments', [CommunityPostController::class, 'comments'])->whereUuid('id')->whereUuid('postId');
+            Route::post('/{id}/posts/{postId}/like/toggle', [CommunityPostController::class, 'toggleLike'])->whereUuid('id')->whereUuid('postId');
+            Route::post('/{id}/posts/{postId}/comments', [CommunityPostController::class, 'storeComment'])->whereUuid('id')->whereUuid('postId');
+            Route::post('/{id}/posts/{postId}/view', [CommunityPostController::class, 'recordView'])->whereUuid('id')->whereUuid('postId');
+
+            Route::post('/{id}/join', [CommunityController::class, 'join'])->whereUuid('id');
+            Route::post('/{id}/join/accept-invite', [CommunityMembershipController::class, 'acceptDirectInvite'])->whereUuid('id');
+            Route::post('/{id}/leave', [CommunityMembershipController::class, 'leave'])->whereUuid('id');
+            Route::get('/{id}/join-requests', [CommunityMembershipController::class, 'joinRequests'])->whereUuid('id');
+            Route::post('/{id}/join-requests/{requestId}/approve', [CommunityMembershipController::class, 'approveJoinRequest'])->whereUuid('id');
+            Route::post('/{id}/join-requests/{requestId}/deny', [CommunityMembershipController::class, 'denyJoinRequest'])->whereUuid('id');
+            Route::get('/{id}/invites', [CommunityMembershipController::class, 'invites'])->whereUuid('id');
+            Route::post('/{id}/invites/direct', [CommunityMembershipController::class, 'inviteDirect'])->whereUuid('id');
+            Route::post('/{id}/invites/link', [CommunityMembershipController::class, 'generateLinkInvite'])->whereUuid('id');
+            Route::delete('/{id}/invites/link', [CommunityMembershipController::class, 'revokeLinkInvite'])->whereUuid('id');
+            Route::delete('/{id}/invites/{inviteId}', [CommunityMembershipController::class, 'revokeDirectInvite'])->whereUuid('id');
         });
     });
 });

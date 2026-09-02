@@ -191,4 +191,23 @@ class Post extends Model
     {
         return $this->hasMany(PostBookmark::class);
     }
+
+    public function hiddenBy()
+    {
+        return $this->hasMany(HiddenPost::class);
+    }
+
+    public function reports()
+    {
+        return $this->hasMany(PostReport::class);
+    }
+
+    public function scopeExcludeHiddenFor($query, ?string $userId)
+    {
+        if (! $userId) {
+            return $query;
+        }
+
+        return $query->whereDoesntHave('hiddenBy', fn ($q) => $q->where('user_id', $userId));
+    }
 }

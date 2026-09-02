@@ -182,6 +182,7 @@ class FeedService
     {
         $query = Post::query()
             ->select(self::POST_SUMMARY_COLUMNS)
+            ->excludeHiddenFor($viewerId)
             ->with(['user:id,username,name,avatar'])
             ->with(['video' => fn ($q) => $q->where('processing_status', 'completed')
                 ->select(['id', 'post_id', 'path', 'hd_path', 'thumbnail_path', 'duration', 'width', 'height', 'format', 'quality_versions'])])

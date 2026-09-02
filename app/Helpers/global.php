@@ -6,6 +6,37 @@ use App\Models\UserComment;
 use App\Models\UserLike;
 use App\Models\UserView;
 use App\Models\Wallet;
+use Illuminate\Http\Request;
+
+if (! function_exists('resolveApiUser')) {
+    /**
+     * Resolve the authenticated user for /v1 API routes.
+     * Prefer the Passport (api) guard, then session (web).
+     */
+    function resolveApiUser(?Request $request = null): ?User
+    {
+        $request ??= request();
+
+        return $request->user('api') ?? $request->user('web') ?? $request->user();
+    }
+}
+
+if (! function_exists('authUserId')) {
+    function authUserId(User|string|null $user = null): ?string
+    {
+        if ($user instanceof User) {
+            return (string) $user->getAuthIdentifier();
+        }
+
+        if (is_string($user) && $user !== '') {
+            return $user;
+        }
+
+        $authUser = resolveApiUser();
+
+        return $authUser ? (string) $authUser->getAuthIdentifier() : null;
+    }
+}
 
 if (! function_exists('normalizeUserLevel')) {
     function normalizeUserLevel(?string $level): string
@@ -45,6 +76,65 @@ if (! function_exists('userBaseCurrency')) {
         $currency = Wallet::where('user_id', $userId)->value('currency');
 
         return $currency ? strtoupper((string) $currency) : null;
+    }
+}
+
+if (! function_exists('convertCurrency')) {
+    function convertCurrency($amount, $from, $to): float
+    {
+        $rates = Currency::where('is_active', true)
+            ->pluck('base_rate', 'code')
+            ->toArray();
+
+        $from = strtoupper((string) $from);
+        $to = strtoupper((string) $to);
+
+        if (! isset($rates[$from])) {
+            throw new \InvalidArgumentException("Unsupported currency: {$from}");
+        }
+
+        if (! isset($rates[$to])) {
+            throw new \InvalidArgumentException("Unsupported currency: {$to}");
+        }
+
+        if ($from === $to) {
+            return round((float) $amount, 2);
+        }
+
+        $baseAmount = (float) $amount / (float) $rates[$from];
+
+        return round($baseAmount * (float) $rates[$to], 2);
+    }
+}
+
+if (! function_exists('communityMinimumPrice')) {
+    function communityMinimumPrice(?string $currency = null): float
+    {
+        $currency = strtoupper((string) ($currency ?? userBaseCurrency() ?? 'USD'));
+        $minimums = config('community.minimum_prices', []);
+
+        if (isset($minimums[$currency])) {
+            return (float) $minimums[$currency];
+        }
+
+        $baseUsd = (float) config('community.default_minimum_usd', 5);
+
+        if ($currency === 'USD') {
+            return $baseUsd;
+        }
+
+        try {
+            return convertCurrency($baseUsd, 'USD', $currency);
+        } catch (\Throwable) {
+            return (float) ($minimums['USD'] ?? $baseUsd);
+        }
+    }
+}
+
+if (! function_exists('countSocialWords')) {
+    function countSocialWords(string $text): int
+    {
+        return preg_match_all('/\S+/u', $text) ?: 0;
     }
 }
 

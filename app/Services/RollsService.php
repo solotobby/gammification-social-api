@@ -191,6 +191,7 @@ class RollsService
     protected function baseQuery(?string $viewerId): Builder
     {
         return Post::query()
+            ->excludeHiddenFor($viewerId)
             ->select([
                 'posts.id',
                 'posts.user_id',

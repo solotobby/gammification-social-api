@@ -96,6 +96,16 @@ class User extends Authenticatable
             ->withTimestamps();
     }
 
+    public function hiddenPosts()
+    {
+        return $this->hasMany(HiddenPost::class);
+    }
+
+    public function postReports()
+    {
+        return $this->hasMany(PostReport::class);
+    }
+
     public function scopeWithPostStatsByUsername(Builder $query, string $username)
     {
         return $query->where('username', $username)
