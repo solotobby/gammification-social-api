@@ -34,11 +34,12 @@ class CommunityService
             throw new InvalidArgumentException('Set up your wallet currency to browse communities.');
         }
 
-        $query = $this->buildListQuery($user, $filters, $currency);
+        $query = $this->buildListQuery($user, $filters, $currency)
+            ->with(['members' => fn ($q) => $q->where('users.id', $user->id)]);
         $paginator = $query->latest()->paginate($perPage);
 
         $paginator->getCollection()->transform(
-            fn (Community $community) => $this->formatCommunityListItem($community),
+            fn (Community $community) => $this->formatCommunityListItem($community, $user),
         );
 
         return $paginator;
@@ -347,7 +348,7 @@ class CommunityService
         return 'request_sent';
     }
 
-    public function formatCommunityListItem(Community $community): array
+    public function formatCommunityListItem(Community $community, User $user): array
     {
         $data = [
             'id' => $community->id,
@@ -359,6 +360,7 @@ class CommunityService
             'image' => $community->image,
             'banner' => $community->banner,
             'members_count' => (int) ($community->members_count ?? 0),
+            'is_member' => $this->isMemberFromCommunity($community, $user),
             'category' => $community->category ? [
                 'id' => $community->category->id,
                 'name' => $community->category->name,
@@ -560,6 +562,19 @@ class CommunityService
             ->where('user_id', $userId)
             ->where('status', 'active')
             ->exists();
+    }
+
+    private function isMemberFromCommunity(Community $community, User $user): bool
+    {
+        if ((string) $community->user_id === (string) $user->id) {
+            return true;
+        }
+
+        if ($community->relationLoaded('members')) {
+            return $community->members->isNotEmpty();
+        }
+
+        return $this->isMember($community, $user->id);
     }
 
     private function memberRole(Community $community, string $userId): ?string
