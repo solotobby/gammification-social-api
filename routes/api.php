@@ -132,8 +132,8 @@ Route::prefix('v1')->group(function () {
 
             Route::post('/invites/{token}/accept', [CommunityMembershipController::class, 'acceptInviteByToken']);
             
-            Route::get('/s/{slug}', [CommunityController::class, 'showBySlug']);
-            Route::post('/s/{slug}/join', [CommunityController::class, 'joinBySlug']);
+            Route::get('/c/{slug}', [CommunityController::class, 'showBySlug']);
+            Route::post('/c/{slug}/join', [CommunityController::class, 'joinBySlug']);
             Route::get('/{id}', [CommunityController::class, 'show'])->whereUuid('id');
 
             Route::get('/{id}/posts', [CommunityPostController::class, 'index'])->whereUuid('id');
