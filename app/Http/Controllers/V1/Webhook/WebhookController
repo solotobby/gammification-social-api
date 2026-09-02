@@ -1,0 +1,572 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Mail\GeneralMail;
+use App\Models\ApiResponse;
+use App\Models\Community;
+use App\Models\Level;
+use App\Models\Transaction;
+use App\Models\Webhook;
+use App\Services\Admin\AdminKorapayService;
+use App\Services\CommunityFlutterwaveService;
+use App\Services\CommunitySubscriptionService;
+use App\Services\PayKoinService;
+use App\Services\TransactionService;
+use App\Services\UpgradeSubscriptionService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Symfony\Component\HttpFoundation\Response;
+
+class WebhookController extends Controller
+{
+
+    protected TransactionService $transactionService;
+    protected UpgradeSubscriptionService $upgradeSubscriptionService;
+    protected CommunitySubscriptionService $communitySubscriptionService;
+
+    public function __construct(TransactionService $transactionService, UpgradeSubscriptionService $upgradeSubscriptionService, CommunitySubscriptionService $communitySubscriptionService)
+    {
+        $this->transactionService = $transactionService;
+        $this->upgradeSubscriptionService = $upgradeSubscriptionService;
+        $this->communitySubscriptionService = $communitySubscriptionService;
+    }
+
+
+    public function korapay(Request $request)
+    {
+        $payload = $request->all();
+        $event = $request['event'];
+
+        ApiResponse::create(['response' => $request]); //store the webhook payload for debugging and auditing purposes
+
+        if ($event == 'charge.success') {
+            // Handle successful charge event
+
+            $amount = $request['data']['amount'] / 100;
+            $status = $request['data']['status'];
+            $reference = $request['data']['reference'];
+            $channel = $request['data']['payment_method'];
+            $currency = $request['data']['currency'];
+
+            //fetch payment information from the database using the reference
+            $transaction = Transaction::query()
+                ->where('ref', $reference)
+                ->lockForUpdate()
+                ->first();
+
+
+            if (!$transaction) {
+                Log::error('Transaction not found for reference: ' . $reference);
+                return response()->json(['status' => 'error', 'message' => 'Transaction not found'], 404);
+            }
+
+            if ($transaction->type === 'korapay_funding') {
+                if ($transaction->status === 'successful') {
+                    return response()->json(['message' => 'KORAPAY FUNDING ALREADY PROCESSED'], 200);
+                }
+
+                if (! str_starts_with(strtoupper($reference), 'KRF-')) {
+                    Log::error('Korapay funding webhook rejected: invalid reference prefix', ['reference' => $reference]);
+
+                    return response()->json(['status' => 'error', 'message' => 'Invalid funding reference'], 400);
+                }
+
+                try {
+                    app(AdminKorapayService::class)->completeFundingFromWebhook($transaction, $payload);
+
+                    return response()->json(['status' => 'success'], 200);
+                } catch (\Throwable $e) {
+                    Log::error('Korapay funding webhook failed', [
+                        'reference' => $reference,
+                        'error' => $e->getMessage(),
+                    ]);
+
+                    return response()->json(['status' => 'error', 'message' => $e->getMessage()], 400);
+                }
+            }
+
+            if ($transaction->type === 'paykoin_topup') {
+                if ($transaction->status === 'successful') {
+                    return response()->json(['message' => 'PAYKOIN TOP-UP ALREADY PROCESSED'], 200);
+                }
+
+                if (! str_starts_with(strtoupper($reference), 'PKN-')) {
+                    Log::error('PayKoin webhook rejected: invalid reference prefix', ['reference' => $reference]);
+
+                    return response()->json(['status' => 'error', 'message' => 'Invalid PayKoin reference'], 400);
+                }
+
+                try {
+                    app(PayKoinService::class)->creditTopUpFromWebhook($transaction, $payload);
+
+                    return response()->json(['status' => 'success'], 200);
+                } catch (\Throwable $e) {
+                    Log::error('PayKoin webhook credit failed', [
+                        'reference' => $reference,
+                        'error' => $e->getMessage(),
+                    ]);
+
+                    return response()->json(['status' => 'error', 'message' => $e->getMessage()], 400);
+                }
+            }
+
+            if (
+                $transaction->status === 'successful'
+            ) {
+                return response()->json(['message' => 'PAYMENT ALREADY PROCESSED'], 400);
+            }
+
+            if (str_starts_with(strtoupper($reference), 'COM-')) {
+
+                $payload = $transaction->meta;
+
+                $communityId = $transaction->meta['community_id'] ?? null;
+
+                if (!$communityId) {
+                    Log::error('Community ID missing from transaction metadata', [
+                        'reference' => $reference,
+                        'transaction_id' => $transaction->id,
+                        'meta' => $transaction->meta,
+                    ]);
+
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Community ID not found',
+                    ], 400);
+                }
+
+
+                $community = Community::find($communityId);
+
+                if (!$community) {
+                    Log::error('Community not found for ID: ' . $communityId, [
+                        'reference' => $reference,
+                        'transaction_id' => $transaction->id,
+                    ]);
+
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Community not found',
+                    ], 404);
+                }
+
+                app(CommunitySubscriptionService::class)->processSuccessfulPayment($community, $transaction->user, $transaction);
+
+
+                $subject = 'Webhook Received: Upgrade Processed Successfully';
+                $content = "Upgrade processed successfully for event: {$event}. Transaction ref: {$reference} has been marked successful and subscription upgraded for {$transaction->user->name}.";
+
+                Mail::to('solotob3@gmail.com')
+                    ->send(new GeneralMail(
+                        (object)[
+                            'name' => 'Oluwatobi Solomon',
+                            'email' => 'solotob3@gmail.com'
+                        ],
+                        $subject,
+                        $content
+                    ));
+
+
+            } elseif (str_starts_with(strtoupper($reference), 'PKY-')) {
+
+                $level = Level::where('id', $transaction->meta['level_id'])->first();
+
+                $this->upgradeSubscriptionService->upgradeSubscription(
+                    $transaction->user,
+                    $level,
+                    $transaction,
+                    $payload
+                );
+
+                $subject = 'Webhook Received: Upgrade Processed Successfully';
+                $content = "Upgrade processed successfully for event: {$event}. Transaction ref: {$reference} has been marked successful and subscription upgraded for {$transaction->user->name}.";
+
+                Mail::to('solotob3@gmail.com')
+                    ->send(new GeneralMail(
+                        (object)[
+                            'name' => 'Oluwatobi Solomon',
+                            'email' => 'solotob3@gmail.com'
+                        ],
+                        $subject,
+                        $content
+                    ));
+            } else {
+
+                // Unknown reference format
+                Log::error('Unknown transaction reference prefix: ' . $reference);
+                return response()->json(['status' => 'error', 'message' => 'Unknown transaction reference'], 400);
+            }
+
+
+
+            return response()->json(['status' => 'success'], 200);
+        } else {
+            // Handle other events or ignore
+            return response()->json(['status' => 'error'], 500);
+        }
+    }
+
+
+    public function handle(Request $request)
+    {
+        $event = $request['event'] ?? null;
+
+        ApiResponse::create(['response' => $request]);
+
+        if ($event !== 'charge.success') {
+            return response()->json(['status' => 'error'], 500);
+        }
+
+        // Legacy partner top-up endpoint — program removed.
+        Log::info('Ignored legacy partner wallet topup webhook', [
+            'reference' => data_get($request, 'data.reference'),
+            'customer_code' => data_get($request, 'data.customer.customer_code'),
+            'amount' => ((float) data_get($request, 'data.amount', 0)) / 100,
+            'currency' => data_get($request, 'data.currency'),
+            'status' => data_get($request, 'data.status'),
+            'channel' => data_get($request, 'data.channel'),
+            'email' => data_get($request, 'data.customer.email'),
+        ]);
+
+        return response()->json(['status' => 'ignored'], 200);
+    }
+
+    public function flutterwave(Request $request)
+    {
+
+        $signature = $request->header('verif-hash');
+
+        /**
+         * Secret Hash from Flutterwave Dashboard
+         */
+        $secretHash = config(
+            'services.env.flutterwave_webhook_hash'
+        );
+
+        /**
+         * Reject invalid requests
+         */
+        if (
+            !$signature ||
+            !hash_equals($secretHash, $signature)
+        ) {
+
+            Log::warning(
+                'Invalid Flutterwave webhook signature',
+                [
+                    'ip' => $request->ip(),
+                    'signature' => $signature,
+                ]
+            );
+
+            abort(401, 'Invalid signature.');
+        }
+
+        $subject = 'Webhook Received: Secure Signature Verified';
+        $content = "Signature verification successful for event: {$request['event']}";
+
+
+        Mail::to('solotob3@gmail.com')
+            ->send(new GeneralMail(
+                (object)[
+                    'name' => 'Oluwatobi Solomon',
+                    'email' => 'solotob3@gmail.com'
+                ],
+                $subject,
+                $content
+            ));
+
+
+
+
+
+        $event = $request['event'];
+
+        ApiResponse::create(['response' => $request]);
+
+        $payload = $request->all();
+
+        Log::info('Flutterwave webhook received', [
+            'payload' => $payload,
+        ]);
+
+        /**
+         * =====================================================
+         * EVENT TYPE
+         * =====================================================
+         */
+        $event = data_get($payload, 'event');
+
+        /**
+         * Example:
+         * charge.completed
+         */
+        if ($event !== 'charge.completed') {
+
+            return response(
+                'Webhook ignored',
+                200
+            );
+        }
+
+
+        $gatewayData = data_get($payload, 'data');
+
+        $txRef = data_get($gatewayData, 'tx_ref');
+
+        $gatewayStatus = strtolower(
+            data_get($gatewayData, 'status')
+        );
+
+        $gatewayAmount = (float) data_get(
+            $gatewayData,
+            'amount'
+        );
+
+        $gatewayCurrency = strtoupper(
+            data_get($gatewayData, 'currency')
+        );
+
+
+        $transaction = Transaction::query()
+            ->where('ref', $txRef)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $transaction && $gatewayStatus === 'successful') {
+            $transaction = app(CommunityFlutterwaveService::class)->resolveRenewalTransaction(
+                $txRef,
+                $gatewayAmount,
+                $gatewayCurrency,
+                $gatewayData ?? []
+            );
+        }
+
+        if (! $transaction) {
+
+            Log::critical(
+                'Flutterwave webhook transaction not found',
+                [
+                    'tx_ref' => $txRef,
+                ]
+            );
+
+            return response(
+                'Transaction not found',
+                404
+            );
+        }
+
+        if ($transaction->status === 'successful') {
+
+            return response(
+                'Already processed',
+                200
+            );
+        }
+
+
+        if (
+            round($transaction->amount, 2)
+            !== round($gatewayAmount, 2)
+        ) {
+
+            Log::critical(
+                'Flutterwave webhook amount mismatch',
+                [
+                    'tx_ref' => $txRef,
+                    'local_amount' => $transaction->amount,
+                    'gateway_amount' => $gatewayAmount,
+                ]
+            );
+
+            $transaction->update([
+                'status' => 'flagged',
+                'meta'
+                => $payload,
+            ]);
+
+            return response(
+                'Amount mismatch',
+                400
+            );
+        }
+
+
+
+        if (
+            strtoupper($transaction->currency)
+            !== $gatewayCurrency
+        ) {
+
+            Log::critical(
+                'Flutterwave webhook currency mismatch',
+                [
+                    'tx_ref' => $txRef,
+                    'local_currency' => $transaction->currency,
+                    'gateway_currency' => $gatewayCurrency,
+                ]
+            );
+
+            $transaction->update([
+                'status' => 'flagged',
+                'meta'
+                => $payload,
+            ]);
+
+            return response(
+                'Currency mismatch',
+                400
+            );
+        }
+
+        $subject = 'Webhook Received: Security Checks Passed';
+        $content = "Security checks passed for event: {$request['event']}. Transaction ref: {$txRef} is being processed.";
+
+
+        Mail::to('solotob3@gmail.com')
+            ->send(new GeneralMail(
+                (object)[
+                    'name' => 'Oluwatobi Solomon',
+                    'email' => 'solotob3@gmail.com'
+                ],
+                $subject,
+                $content
+            ));
+
+
+
+        /**
+         * =====================================================
+         * HANDLE SUCCESSFUL PAYMENT
+         * =====================================================
+         */
+        if ($gatewayStatus === 'successful') {
+
+            DB::transaction(function () use (
+                $transaction,
+                $gatewayData,
+                $payload,
+                $txRef,
+                $event
+            ) {
+
+                $transaction->refresh();
+
+                if ($transaction->status === 'successful') {
+                    return;
+                }
+
+                $reference = strtoupper((string) $txRef);
+                $isCommunity = str_starts_with($reference, 'COM-')
+                    || str_starts_with((string) $transaction->type, 'community_');
+
+                if ($isCommunity) {
+                    $this->processCommunityFlutterwavePayment($transaction, $payload);
+                } elseif (str_starts_with($reference, 'PKY-')) {
+                    $level = Level::where('id', $transaction->meta['level_id'] ?? null)->first();
+
+                    if (! $level) {
+                        Log::error('Level not found for PKY transaction', [
+                            'tx_ref' => $txRef,
+                            'transaction_id' => $transaction->id,
+                        ]);
+
+                        throw new \RuntimeException('Subscription level not found');
+                    }
+
+                    $this->upgradeSubscriptionService->upgradeSubscription(
+                        $transaction->user,
+                        $level,
+                        $transaction,
+                        $payload
+                    );
+                } else {
+                    Log::error('Unknown Flutterwave transaction reference prefix', [
+                        'tx_ref' => $txRef,
+                        'transaction_id' => $transaction->id,
+                    ]);
+
+                    throw new \RuntimeException('Unknown transaction reference');
+                }
+
+                Mail::to('solotob3@gmail.com')
+                    ->send(new GeneralMail(
+                        (object) [
+                            'name' => 'Oluwatobi Solomon',
+                            'email' => 'solotob3@gmail.com',
+                        ],
+                        'Webhook Received: Payment Processed Successfully',
+                        "Payment processed for event: {$event}. Transaction ref: {$txRef}."
+                    ));
+            });
+
+            Log::info(
+                'Flutterwave webhook processed successfully',
+                [
+                    'tx_ref' => $txRef,
+                ]
+            );
+
+            return response(
+                'Webhook processed',
+                200
+            );
+        }
+
+        /**
+         * =====================================================
+         * HANDLE FAILED PAYMENTS
+         * =====================================================
+         */
+        $transaction->update([
+            'status' => $gatewayStatus,
+            'meta'
+            => $payload,
+        ]);
+
+        $this->transactionService->markFailed($transaction, $payload);
+
+        return response(
+            'Webhook processed',
+            200
+        );
+    }
+
+    /**
+     * Activate or renew community membership from a Flutterwave COM- transaction.
+     */
+    private function processCommunityFlutterwavePayment(Transaction $transaction, array $payload): void
+    {
+        $communityId = $transaction->meta['community_id'] ?? null;
+
+        if (! $communityId) {
+            Log::error('Community ID missing from COM transaction metadata', [
+                'reference' => $transaction->ref,
+                'transaction_id' => $transaction->id,
+            ]);
+
+            throw new \RuntimeException('Community ID not found');
+        }
+
+        $community = Community::find($communityId);
+
+        if (! $community) {
+            Log::error('Community not found for Flutterwave payment', [
+                'community_id' => $communityId,
+                'reference' => $transaction->ref,
+            ]);
+
+            throw new \RuntimeException('Community not found');
+        }
+
+        $this->communitySubscriptionService->processSuccessfulPayment(
+            $community,
+            $transaction->user,
+            $transaction
+        );
+    }
+}

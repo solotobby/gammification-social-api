@@ -39,6 +39,15 @@ return [
         'kora_sec' => env('KORA_SEC'),
         'kora_pub' => env('KORA_PUB'),
         'kora_base_url' => env('KORA_BASE_URL', 'https://api.korapay.com/merchant/api/v1'),
+        'flutterwave_secret_key' => env('FLUTTERWAVE_SECRET_KEY'),
+        'flutterwave_public_key' => env('FLUTTERWAVE_PUBLIC_KEY'),
+        'flutterwave_base_url' => env('FLUTTERWAVE_BASE_URL', 'https://api.flutterwave.com/v3'),
+        'flutterwave_webhook_hash' => env('FLUTTERWAVE_WEBHOOK_SECRET_HASH'),
+    ],
+
+    'payment' => [
+        'korapay_redirect_url' => env('KORAPAY_REDIRECT_URL', env('APP_URL').'/payment/korapay/callback'),
+        'flutterwave_redirect_url' => env('FLUTTERWAVE_REDIRECT_URL', env('APP_URL').'/payment/flutterwave/callback'),
     ],
 
 ];

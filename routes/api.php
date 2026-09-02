@@ -13,11 +13,13 @@ use App\Http\Controllers\V1\Timeline\FeedController;
 use App\Http\Controllers\V1\Timeline\PostActionController;
 use App\Http\Controllers\V1\Timeline\PostAnalyticsController;
 use App\Http\Controllers\V1\User\BankInformationController;
+use App\Http\Controllers\V1\User\LevelController;
 use App\Http\Controllers\V1\User\ReferralController;
 use App\Http\Controllers\V1\User\SocialController;
 use App\Http\Controllers\V1\User\TransactionController;
 use App\Http\Controllers\V1\User\UserController;
 use App\Http\Controllers\V1\User\WalletController;
+use App\Http\Controllers\V1\Webhook\PaymentWebhookController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -53,6 +55,8 @@ Route::prefix('v1')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])
         ->middleware('throttle:20,1');
 
+    Route::post('/webhooks/flutterwave', [PaymentWebhookController::class, 'flutterwave']);
+
     Route::post('/logout', [AuthController::class, 'logout'])
         ->middleware(['auth:api,web', 'throttle:60,1']);
 
@@ -65,6 +69,8 @@ Route::prefix('v1')->group(function () {
 
         Route::prefix('user')->group(function () {
             Route::get('/me', [UserController::class, 'me']);
+            Route::get('/levels', [LevelController::class, 'index']);
+            Route::post('/levels/{levelId}/checkout', [LevelController::class, 'checkout'])->whereUuid('levelId');
             Route::match(['put', 'patch', 'post'], '/profile', [UserController::class, 'updateProfile']);
             Route::get('/socials', [SocialController::class, 'show']);
             Route::match(['put', 'patch', 'post'], '/socials', [SocialController::class, 'update']);
