@@ -14,6 +14,7 @@ class CommunityPost extends Model
         'community_id',
         'user_id',
         'content',
+        'media_status',
     ];
 
     /**
@@ -64,5 +65,19 @@ class CommunityPost extends Model
     public function views()
     {
         return $this->hasMany(CommunityPostView::class);
+    }
+
+    public function refreshMediaStatus(): void
+    {
+        $statuses = $this->media()->pluck('processing_status');
+
+        $status = match (true) {
+            $statuses->isEmpty() => 'ready',
+            $statuses->contains('failed') => 'failed',
+            $statuses->every(fn ($s) => $s === 'completed') => 'completed',
+            default => 'processing',
+        };
+
+        $this->update(['media_status' => $status]);
     }
 }

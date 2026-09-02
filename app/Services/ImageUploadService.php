@@ -18,6 +18,14 @@ class ImageUploadService
      */
     public function upload(UploadedFile|string $file, string $folder = 'payhankey_media/images', ?string $userId = null): string
     {
+        return $this->spacesUrl($this->uploadReturningKey($file, $folder, $userId));
+    }
+
+    /**
+     * Upload and return the Spaces object key (not the public URL).
+     */
+    public function uploadReturningKey(UploadedFile|string $file, string $folder = 'payhankey_media/images', ?string $userId = null): string
+    {
         $userId = $userId ?? (string) auth()->id();
         $filename = Str::uuid().'-'.$userId.'.webp';
         $key = trim($folder, '/').'/'.$filename;
@@ -26,7 +34,7 @@ class ImageUploadService
 
         Storage::disk('spaces')->put($key, $binary, ['visibility' => 'public']);
 
-        return $this->spacesUrl($key);
+        return $key;
     }
 
     /**

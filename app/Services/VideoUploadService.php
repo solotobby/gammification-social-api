@@ -119,6 +119,47 @@ class VideoUploadService
     }
 
     /**
+     * Upload a community post video directly to Spaces (no transcode tiers).
+     *
+     * @return array{path: string, url: string, width: ?int, height: ?int, size_bytes: ?int, duration: ?int}
+     */
+    public function uploadCommunityVideo(string $localPath, string $communityId): array
+    {
+        $extension = strtolower(pathinfo($localPath, PATHINFO_EXTENSION) ?: 'mp4');
+        $allowed = ['mp4', 'mov', 'webm', 'quicktime'];
+        if (! in_array($extension, $allowed, true)) {
+            $extension = 'mp4';
+        }
+
+        if ($extension === 'quicktime') {
+            $extension = 'mov';
+        }
+
+        $key = 'communities/'.$communityId.'/posts/'.Str::uuid().'.'.$extension;
+        $disk = Storage::disk('spaces');
+
+        $disk->put($key, fopen($localPath, 'r'), [
+            'visibility' => 'public',
+            'ContentType' => match ($extension) {
+                'mov' => 'video/quicktime',
+                'webm' => 'video/webm',
+                default => 'video/mp4',
+            },
+        ]);
+
+        $meta = $this->hasFfmpeg() ? $this->probe($localPath) : [];
+
+        return [
+            'path' => $key,
+            'url' => $this->spacesUrl($key),
+            'width' => $meta['width'] ?? null,
+            'height' => $meta['height'] ?? null,
+            'size_bytes' => file_exists($localPath) ? filesize($localPath) : null,
+            'duration' => isset($meta['duration']) ? (int) round((float) $meta['duration']) : null,
+        ];
+    }
+
+    /**
      * @return array{
      *   url: string,
      *   public_id: string,

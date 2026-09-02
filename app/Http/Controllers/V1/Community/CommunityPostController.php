@@ -243,12 +243,14 @@ class CommunityPostController extends Controller
         }
 
         try {
-            $data = $this->communityPostService->create($user, $id, $validated, $mediaFiles);
+            $result = $this->communityPostService->create($user, $id, $validated, $mediaFiles);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Post created',
-                'data' => $data,
+                'message' => ($result['media_status'] ?? 'ready') === 'processing'
+                    ? 'Post created — media is processing and will appear shortly'
+                    : 'Post created',
+                'data' => $result['post'],
             ], 201);
         } catch (ModelNotFoundException $e) {
             return response()->json([

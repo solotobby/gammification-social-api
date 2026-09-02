@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Jobs\ProcessCommunityPostImage;
+use App\Jobs\ProcessCommunityPostVideo;
 use App\Models\Community;
 use App\Models\CommunityPost;
 use App\Models\CommunityPostComment;
@@ -177,6 +179,7 @@ class CommunityPostService
     /**
      * @param  array<string, mixed>  $validated
      * @param  array<int, UploadedFile>  $mediaFiles
+     * @return array{post: array<string, mixed>, media_status: string}
      */
     public function create(User $user, string $communityId, array $validated, array $mediaFiles = []): array
     {
@@ -198,10 +201,14 @@ class CommunityPostService
             );
         }
 
-        $post = DB::transaction(function () use ($user, $community, $content, $mediaFiles) {
+        $hasMedia = $mediaFiles !== [];
+        $queued = ['images' => [], 'videos' => []];
+
+        $post = DB::transaction(function () use ($user, $community, $content, $mediaFiles, $hasMedia, &$queued) {
             $post = $community->posts()->create([
                 'user_id' => $user->id,
                 'content' => $content !== '' ? $content : null,
+                'media_status' => $hasMedia ? 'processing' : 'ready',
             ]);
 
             foreach ($mediaFiles as $index => $file) {
@@ -210,21 +217,57 @@ class CommunityPostService
                 }
 
                 $isVideo = str_starts_with((string) $file->getMimeType(), 'video/');
-                $path = $file->store('communities/'.$community->id.'/posts', 'spaces');
+                $localFolder = $isVideo ? 'queue/community/videos' : 'queue/community/images';
+                $localPath = $file->store($localFolder, 'local');
 
-                $post->media()->create([
-                    'path' => $path,
+                $media = $post->media()->create([
+                    'path' => $localPath,
                     'type' => $isVideo ? 'video' : 'image',
                     'sort' => $index,
+                    'processing_status' => 'processing',
                 ]);
+
+                $absolutePath = Storage::disk('local')->path($localPath);
+
+                if ($isVideo) {
+                    $queued['videos'][] = [
+                        'id' => $media->id,
+                        'local' => $absolutePath,
+                    ];
+                } else {
+                    $queued['images'][] = [
+                        'id' => $media->id,
+                        'local' => $absolutePath,
+                    ];
+                }
             }
 
             return $post;
         });
 
+        foreach ($queued['images'] as $img) {
+            ProcessCommunityPostImage::dispatch(
+                $img['id'],
+                $img['local'],
+                $user->id,
+                $community->id,
+            )->afterCommit();
+        }
+
+        foreach ($queued['videos'] as $video) {
+            ProcessCommunityPostVideo::dispatch(
+                $video['id'],
+                $video['local'],
+                $community->id,
+            )->afterCommit();
+        }
+
         $post->load(['user:id,username,name,avatar', 'media']);
 
-        return $this->formatPost($post, $user);
+        return [
+            'post' => $this->formatPost($post, $user),
+            'media_status' => $post->media_status,
+        ];
     }
 
     public function formatPost(CommunityPost $post, ?User $viewer = null, bool $includeCommentsPreview = false): array
@@ -249,9 +292,14 @@ class CommunityPostService
             'media' => $post->media->map(fn ($item) => [
                 'id' => $item->id,
                 'type' => $item->type,
-                'url' => Storage::disk('spaces')->url($item->path),
+                'url' => $item->processing_status === 'completed' ? $item->url : null,
+                'processing_status' => $item->processing_status ?? 'completed',
+                'failure_reason' => $item->failure_reason,
+                'width' => $item->width,
+                'height' => $item->height,
                 'sort' => (int) $item->sort,
             ])->values()->all(),
+            'media_status' => $post->media_status ?? 'ready',
             'created_at' => $post->created_at?->toIso8601String(),
         ];
 

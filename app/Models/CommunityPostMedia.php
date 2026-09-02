@@ -16,6 +16,12 @@ class CommunityPostMedia extends Model
         'path',
         'type',
         'sort',
+        'processing_status',
+        'thumbnail_path',
+        'width',
+        'height',
+        'size_bytes',
+        'failure_reason',
     ];
 
     public function post()
@@ -25,6 +31,14 @@ class CommunityPostMedia extends Model
 
     public function getUrlAttribute(): string
     {
+        if ($this->processing_status !== 'completed') {
+            return '';
+        }
+
+        if (str_starts_with((string) $this->path, 'http://') || str_starts_with((string) $this->path, 'https://')) {
+            return $this->path;
+        }
+
         return Storage::disk('spaces')->url($this->path);
     }
 
