@@ -62,12 +62,7 @@ Route::prefix('v1')->group(function () {
 
     Route::post('/webhooks/flutterwave', [PaymentWebhookController::class, 'flutterwave'])->name('flutterwave.webhook');
     Route::post('/webhooks/korapay', [PaymentWebhookController::class, 'korapay'])->name('korapay.webhook');
-
-    // Public Gift & PayKoin catalog
-    Route::get('/gifts', [PostGiftController::class, 'index']);
-    Route::get('/gifts/post/{type}/{id}', [PostGiftController::class, 'postGifts']);
-    Route::get('/paykoin/rates', [PayKoinController::class, 'rates']);
-
+   
     Route::post('/logout', [AuthController::class, 'logout'])
         ->middleware(['auth:api,web', 'throttle:60,1']);
 
@@ -88,7 +83,13 @@ Route::prefix('v1')->group(function () {
         });
 
         // Post Gifts
-        Route::post('/gifts/send', [PostGiftController::class, 'send']);
+        Route::prefix('gifts')->group(function () { 
+            Route::post('/send', [PostGiftController::class, 'send']);
+            Route::get('/', [PostGiftController::class, 'index']);
+            Route::get('/post/{type}/{id}', [PostGiftController::class, 'postGifts']);
+            Route::get('/paykoin/rates', [PayKoinController::class, 'rates']);
+        });
+      
 
         Route::prefix('user')->group(function () {
             Route::get('/me', [UserController::class, 'me']);
