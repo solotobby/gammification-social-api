@@ -26,7 +26,13 @@ class CommunityPost extends Model
         'views_count' => 'integer',
         'likes_count' => 'integer',
         'comments_count' => 'integer',
+        'gifts_count' => 'integer',
     ];
+
+    public function gifts()
+    {
+        return $this->morphMany(PostGift::class, 'giftable');
+    }
 
     public function community()
     {

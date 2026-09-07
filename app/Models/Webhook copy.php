@@ -20,6 +20,6 @@ class Webhook extends Model
         'level',
         'number_of_slot',
         'amount',
-        'currency'
+        'currency',
     ];
 }

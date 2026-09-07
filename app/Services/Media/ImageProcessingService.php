@@ -38,12 +38,12 @@ class ImageProcessingService
 
             $encoded = $image->encodeUsingFormat(Format::WEBP, quality: $spec['quality']);
 
-            $filename = Str::uuid() . "-{$name}.webp";
+            $filename = Str::uuid()."-{$name}.webp";
             $path = "payhankey_media/images/{$userId}/{$filename}";
 
             Storage::disk('spaces')->put($path, (string) $encoded, 'public');
 
-            $result[$name] = config('filesystems.disks.spaces.url') . '/' . $path;
+            $result[$name] = config('filesystems.disks.spaces.url').'/'.$path;
         }
 
         return $result;

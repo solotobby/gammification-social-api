@@ -8,10 +8,14 @@ use App\Models\CommunityJoinRequest;
 use App\Models\CommunitySubscription;
 use App\Models\User;
 use App\Support\CommunityFeeCalculator;
+use App\Support\StoredMedia;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
@@ -130,7 +134,7 @@ class CommunityService
             'public' => $this->joinPublic($community, $user),
             'approval' => $this->requestToJoin($community, $user),
             'private' => $this->joinPrivate($community, $user, $payload['invite_token'] ?? null),
-            'paid' => throw new InvalidArgumentException('Payment is required to join this community.'),
+            'paid' => $this->joinPaid($community, $user),
             default => throw new InvalidArgumentException('Unable to join this community.'),
         };
 
@@ -218,6 +222,218 @@ class CommunityService
         $community->loadCount('members');
 
         return $this->formatCommunityDetail($community, $user, $invite);
+    }
+
+    public function getCommunityById(string $id): Community
+    {
+        return Community::findOrFail($id);
+    }
+
+    /**
+     * Update an existing community (creator only).
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    public function update(User $user, string $id, array $validated, ?UploadedFile $logo = null, ?UploadedFile $banner = null): array
+    {
+        $community = Community::findOrFail($id);
+        $this->assertIsOwner($community, $user);
+
+        $currency = $community->currency ?? userBaseCurrency($user->id) ?? 'NGN';
+        $isPaid = ($validated['type'] ?? $community->type) === 'paid';
+
+        $data = [
+            'description' => $validated['description'] ?? $community->description,
+            'community_categories_id' => $validated['community_categories_id'] ?? $community->community_categories_id,
+            'type' => $validated['type'] ?? $community->type,
+        ];
+
+        if (isset($validated['name']) && $validated['name'] !== $community->name) {
+            $data['name'] = $validated['name'];
+            $data['slug'] = $this->uniqueSlug($validated['name'], $community->id);
+        }
+
+        if ($isPaid) {
+            $billingType = $validated['billing_type'] ?? $community->billing_type ?? 'one_off';
+            if ($currency === 'NGN') {
+                $billingType = 'one_off';
+            }
+
+            $data['monthly_fee'] = $validated['monthly_fee'] ?? $community->monthly_fee;
+            $data['fee_payer'] = $validated['fee_payer'] ?? $community->fee_payer ?? 'creator';
+            $data['billing_type'] = $billingType;
+            $data['billing_interval'] = $billingType === 'subscription'
+                ? ($validated['billing_interval'] ?? $community->billing_interval ?? 'monthly')
+                : null;
+            $data['platform_fee_percent'] = $community->platform_fee_percent ?? (int) config('community.platform_fee_percent', 10);
+        } else {
+            $data['monthly_fee'] = 0;
+            $data['fee_payer'] = 'creator';
+            $data['billing_type'] = null;
+            $data['billing_interval'] = null;
+            $data['platform_fee_percent'] = null;
+        }
+
+        if ($logo) {
+            StoredMedia::delete($community->image, 'spaces');
+            $data['image'] = $this->storeCommunityAsset($community, $logo, 'logo');
+        }
+
+        if ($banner) {
+            StoredMedia::delete($community->banner, 'spaces');
+            $data['banner'] = $this->storeCommunityAsset($community, $banner, 'banner');
+        }
+
+        $community->update($data);
+        $community->refresh();
+
+        if ($community->type === 'private' && ! $this->communityInviteService->activeLinkInvite($community)) {
+            $this->communityInviteService->regenerateLinkInvite($community, $user);
+        }
+
+        $community->load(['category', 'user:id,username,name,avatar']);
+        $community->loadCount('members');
+
+        return $this->formatCommunityDetail($community, $user);
+    }
+
+    public function updateLogo(User $user, string $id, UploadedFile $file): array
+    {
+        $community = Community::findOrFail($id);
+        $this->assertIsOwner($community, $user);
+
+        StoredMedia::delete($community->image, 'spaces');
+        $path = $this->storeCommunityAsset($community, $file, 'logo');
+        $community->update(['image' => $path]);
+        $community->refresh();
+
+        return $this->formatCommunityDetail($community, $user);
+    }
+
+    public function removeLogo(User $user, string $id): array
+    {
+        $community = Community::findOrFail($id);
+        $this->assertIsOwner($community, $user);
+
+        if ($community->image) {
+            StoredMedia::delete($community->image, 'spaces');
+            $community->update(['image' => null]);
+            $community->refresh();
+        }
+
+        return $this->formatCommunityDetail($community, $user);
+    }
+
+    public function updateBanner(User $user, string $id, UploadedFile $file): array
+    {
+        $community = Community::findOrFail($id);
+        $this->assertIsOwner($community, $user);
+
+        StoredMedia::delete($community->banner, 'spaces');
+        $path = $this->storeCommunityAsset($community, $file, 'banner');
+        $community->update(['banner' => $path]);
+        $community->refresh();
+
+        return $this->formatCommunityDetail($community, $user);
+    }
+
+    public function removeBanner(User $user, string $id): array
+    {
+        $community = Community::findOrFail($id);
+        $this->assertIsOwner($community, $user);
+
+        if ($community->banner) {
+            StoredMedia::delete($community->banner, 'spaces');
+            $community->update(['banner' => null]);
+            $community->refresh();
+        }
+
+        return $this->formatCommunityDetail($community, $user);
+    }
+
+    public function archive(User $user, string $id): array
+    {
+        $community = Community::findOrFail($id);
+        $this->assertIsOwner($community, $user);
+
+        $community->update([
+            'type' => 'private',
+            'archived_at' => now(),
+        ]);
+        $community->refresh();
+
+        if (! $this->communityInviteService->activeLinkInvite($community)) {
+            $this->communityInviteService->regenerateLinkInvite($community, $user);
+        }
+
+        return $this->formatCommunityDetail($community, $user);
+    }
+
+    public function unarchive(User $user, string $id): array
+    {
+        $community = Community::findOrFail($id);
+        $this->assertIsOwner($community, $user);
+
+        $community->update(['archived_at' => null]);
+        $community->refresh();
+
+        return $this->formatCommunityDetail($community, $user);
+    }
+
+    public function delete(User $user, string $id): array
+    {
+        $community = Community::findOrFail($id);
+        $this->assertIsOwner($community, $user);
+
+        StoredMedia::delete($community->image, 'spaces');
+        StoredMedia::delete($community->banner, 'spaces');
+        Storage::disk('spaces')->deleteDirectory('communities/'.$community->id);
+
+        $community->delete();
+
+        return [
+            'deleted' => true,
+            'id' => $id,
+        ];
+    }
+
+    public function feePreview(array $params): array
+    {
+        $monthlyFee = (float) ($params['monthly_fee'] ?? 0);
+        $feePayer = (string) ($params['fee_payer'] ?? 'creator');
+        $platformFeePercent = (int) config('community.platform_fee_percent', 10);
+        $billingType = (string) ($params['billing_type'] ?? 'subscription');
+        $billingInterval = (string) ($params['billing_interval'] ?? 'monthly');
+
+        $breakdown = CommunityFeeCalculator::breakdown(
+            $monthlyFee,
+            $platformFeePercent,
+            $feePayer,
+        );
+
+        $suffix = $billingType === 'one_off'
+            ? ' one-time'
+            : config("community.billing_intervals.{$billingInterval}.suffix", '');
+
+        return array_merge($breakdown, [
+            'billing_type' => $billingType,
+            'billing_interval' => $billingInterval,
+            'suffix' => $suffix,
+            'platform_fee_percent' => $platformFeePercent,
+        ]);
+    }
+
+    public function storeCommunityAsset(Community $community, UploadedFile $file, string $prefix): string
+    {
+        $extension = $file->getClientOriginalExtension() ?: 'jpg';
+        $filename = $prefix.'-'.Str::uuid().'.'.$extension;
+
+        return Storage::disk('spaces')->putFileAs(
+            'communities/'.$community->id,
+            $file,
+            $filename,
+            'public',
+        );
     }
 
     /**
@@ -665,13 +881,49 @@ class CommunityService
         };
     }
 
-    private function uniqueSlug(string $name): string
+    public function assertIsOwner(Community $community, User $user): void
+    {
+        if (! $this->isOwner($community, (string) $user->id)) {
+            throw new AuthorizationException('Only the community owner can perform this action.');
+        }
+    }
+
+    public function assertCanManage(Community $community, User $user): void
+    {
+        if (! $this->isOwnerOrAdmin($community, (string) $user->id)) {
+            throw new AuthorizationException('Only the community owner or an admin can perform this action.');
+        }
+    }
+
+    private function joinPaid(Community $community, User $user): string
+    {
+        $hasActiveSub = CommunitySubscription::query()
+            ->where('community_id', $community->id)
+            ->where('user_id', $user->id)
+            ->where('status', 'active')
+            ->where(function ($q) {
+                $q->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->exists();
+
+        if ($hasActiveSub) {
+            $this->communityMembershipService->attachMember($community, $user->id);
+
+            return 'joined';
+        }
+
+        return 'payment_required';
+    }
+
+    private function uniqueSlug(string $name, ?string $exceptId = null): string
     {
         $base = Str::slug($name);
         $slug = $base ?: Str::random(8);
         $suffix = 1;
 
-        while (Community::where('slug', $slug)->exists()) {
+        while (Community::where('slug', $slug)
+            ->when($exceptId, fn ($q) => $q->where('id', '!=', $exceptId))
+            ->exists()) {
             $slug = "{$base}-{$suffix}";
             $suffix++;
         }

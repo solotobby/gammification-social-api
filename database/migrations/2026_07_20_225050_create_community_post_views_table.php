@@ -17,7 +17,7 @@ return new class extends Migration
             $table->foreignUuid('user_id')->constrained('users')->cascadeOnDelete();
             $table->string('ip_address', 45)->nullable();
             $table->timestamps();
- 
+
             // One counted view per user per post — repeat visits don't inflate it.
             $table->unique(['community_post_id', 'user_id']);
         });

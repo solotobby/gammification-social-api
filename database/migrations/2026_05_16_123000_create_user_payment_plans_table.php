@@ -24,7 +24,7 @@ return new class extends Migration
             $table->string('payment_plan_token');
             $table->string('status')->default('active');
             $table->timestamps();
-            
+
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             $table->foreign('level_id')->references('id')->on('levels')->onDelete('cascade');
 

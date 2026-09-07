@@ -10,9 +10,22 @@ class Wallet extends Model
 {
     use HasFactory, UuidTrait;
 
-    protected $fillable = ['user_id', 'promoter_balance', 'referral_balance', 'balance', 'currency', 'level', 'usdt_wallet_address', 'currency_updated_at'];
+    protected $fillable = [
+        'user_id',
+        'promoter_balance',
+        'referral_balance',
+        'paykoin_spendable',
+        'paykoin_earned',
+        'balance',
+        'currency',
+        'level',
+        'usdt_wallet_address',
+        'currency_updated_at',
+    ];
 
     protected $casts = [
-        'currency_updated_at'
+        'paykoin_spendable' => 'integer',
+        'paykoin_earned' => 'integer',
+        'currency_updated_at' => 'datetime',
     ];
 }

@@ -25,7 +25,6 @@ class PostImages extends Model
         'failure_reason',
     ];
 
-
     public function post()
     {
         return $this->belongsTo(Post::class);

@@ -17,9 +17,11 @@ class FeedService
     public function __construct(protected PostEarningsService $earningsService) {}
 
     private const COMMENTS_PREVIEW_LIMIT = 3;
+
     private const LIKERS_PREVIEW_LIMIT = 3;
 
     private const USER_LIKES_TABLE = 'user_likes';
+
     private const COMMENTS_TABLE = 'comments';
 
     private const POST_SUMMARY_COLUMNS = [

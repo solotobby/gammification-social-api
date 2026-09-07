@@ -45,60 +45,60 @@ class FollowService
         return $result;
     }
 
- protected function follow(User $authUser, User $targetUser): array
-{
-    try {
-        Follow::create([
-            'follower_id' => $authUser->id,
-            'following_id' => $targetUser->id,
-        ]);
-    } catch (QueryException $e) {
-        if (! $this->isUniqueViolation($e)) {
-            throw $e;
+    protected function follow(User $authUser, User $targetUser): array
+    {
+        try {
+            Follow::create([
+                'follower_id' => $authUser->id,
+                'following_id' => $targetUser->id,
+            ]);
+        } catch (QueryException $e) {
+            if (! $this->isUniqueViolation($e)) {
+                throw $e;
+            }
+
+            // Already following — do not inflate counts.
+            return $this->buildResult($authUser, $targetUser, following: true);
         }
 
-        // Already following — do not inflate counts.
+        User::whereKey($authUser->id)->increment('following');
+        User::whereKey($targetUser->id)->increment('followers');
+
         return $this->buildResult($authUser, $targetUser, following: true);
     }
 
-    User::whereKey($authUser->id)->increment('following');
-    User::whereKey($targetUser->id)->increment('followers');
+    protected function unfollow(User $authUser, User $targetUser, Follow $follow): array
+    {
+        $follow->delete();
 
-    return $this->buildResult($authUser, $targetUser, following: true);
-}
+        User::whereKey($authUser->id)->where('following', '>', 0)->decrement('following');
+        User::whereKey($targetUser->id)->where('followers', '>', 0)->decrement('followers');
 
-protected function unfollow(User $authUser, User $targetUser, Follow $follow): array
-{
-    $follow->delete();
+        return $this->buildResult($authUser, $targetUser, following: false);
+    }
 
-    User::whereKey($authUser->id)->where('following', '>', 0)->decrement('following');
-    User::whereKey($targetUser->id)->where('followers', '>', 0)->decrement('followers');
+    /**
+     * Explicit per-user shape — no ambiguity about whose count is whose.
+     */
+    protected function buildResult(User $authUser, User $targetUser, bool $following): array
+    {
+        $freshAuth = $authUser->fresh();
+        // $freshTarget = $targetUser->fresh();
 
-    return $this->buildResult($authUser, $targetUser, following: false);
-}
-
-/**
- * Explicit per-user shape — no ambiguity about whose count is whose.
- */
-protected function buildResult(User $authUser, User $targetUser, bool $following): array
-{
-    $freshAuth = $authUser->fresh();
-    // $freshTarget = $targetUser->fresh();
-
-    return [
-        'following' => $following,
-        'auth_user' => [
-            'id' => $freshAuth->id,
-            'following_count' => $freshAuth->following,
-            'followers_count' => $freshAuth->followers,
-        ],
-        // 'target_user' => [
-        //     'id' => $freshTarget->id,
-        //     'following_count' => $freshTarget->following,
-        //     'followers_count' => $freshTarget->followers,
-        // ],
-    ];
-}
+        return [
+            'following' => $following,
+            'auth_user' => [
+                'id' => $freshAuth->id,
+                'following_count' => $freshAuth->following,
+                'followers_count' => $freshAuth->followers,
+            ],
+            // 'target_user' => [
+            //     'id' => $freshTarget->id,
+            //     'following_count' => $freshTarget->following,
+            //     'followers_count' => $freshTarget->followers,
+            // ],
+        ];
+    }
     // protected function sendNotification(User $recipient, User $actor, bool $following): void
     // {
     //     $recipient->notify(new GeneralNotification([

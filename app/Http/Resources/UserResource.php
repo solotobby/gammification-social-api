@@ -4,7 +4,6 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Override;
 
 class UserResource extends JsonResource
 {
@@ -13,8 +12,6 @@ class UserResource extends JsonResource
      *
      * @return array<string, mixed>
      */
-
-   
     public function toArray(Request $request): array
     {
         // return parent::toArray($request);
@@ -37,9 +34,8 @@ class UserResource extends JsonResource
             //    return [
             //     'plan' => $this->plan_name
             //    ];
-               
-            // }),
 
+            // }),
 
             // 'wallet' => $this->whenLoaded('wallet', function () {
             //     return [

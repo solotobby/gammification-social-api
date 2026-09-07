@@ -18,17 +18,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Throwable;
-use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Validation\ValidationException;
-
 
 class AuthController extends Controller
 {
-
-
-
     public function register(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -39,24 +34,24 @@ class AuthController extends Controller
                 'min:3',
                 'max:50',
                 'alpha_dash',
-                'unique:users,username'
+                'unique:users,username',
             ],
             'email' => [
                 'required',
                 'email:rfc,dns',
                 'max:255',
-                'unique:users,email'
+                'unique:users,email',
             ],
             'password' => [
                 'required',
                 'string',
                 'min:8',
-                'max:255'
+                'max:255',
             ],
             'referral_code' => [
                 'nullable',
                 'string',
-                'exists:users,referral_code'
+                'exists:users,referral_code',
             ],
         ]);
 
@@ -70,14 +65,14 @@ class AuthController extends Controller
                     'id',
                     'name',
                     'amount',
-                    'reg_bonus'
+                    'reg_bonus',
                 ])
                 ->where('name', 'Basic')
                 ->firstOrFail();
 
             $referrerId = null;
 
-            if (!empty($validated['referral_code'])) {
+            if (! empty($validated['referral_code'])) {
 
                 $referrerId = User::query()
                     ->where('referral_code', $validated['referral_code'])
@@ -91,7 +86,6 @@ class AuthController extends Controller
                 $referrerId,
                 $otp
             ) {
-
 
                 /**
                  * Create user
@@ -143,7 +137,7 @@ class AuthController extends Controller
                  * Update user
                  */
                 $user->update([
-                    'access_code_id' => $accessCode->id
+                    'access_code_id' => $accessCode->id,
                 ]);
 
                 /**
@@ -156,7 +150,6 @@ class AuthController extends Controller
                         'referral_id' => $referrerId,
                     ]);
                 }
-
 
                 $sendOTP = UserOTP::create([
                     'user_id' => $user->id,
@@ -187,7 +180,7 @@ class AuthController extends Controller
                 'message' => 'Otp Sent to the email Supplied',
                 'data' => [
                     'id' => $user->id,
-                    'otp' => $otp
+                    'otp' => $otp,
                     // 'name' => $user->name,
                     // 'username' => $user->username,
                     // 'email' => $user->email,
@@ -204,13 +197,10 @@ class AuthController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage(), //'Unable to process registration at this time.'
+                'message' => $e->getMessage(), // 'Unable to process registration at this time.'
             ], 500);
         }
     }
-
-
-
 
     private function generateReferralCode(): string
     {
@@ -219,8 +209,8 @@ class AuthController extends Controller
             $code = strtoupper(Str::random(8));
         } while (
             User::query()
-            ->where('referral_code', $code)
-            ->exists()
+                ->where('referral_code', $code)
+                ->exists()
         );
 
         return $code;
@@ -241,10 +231,10 @@ class AuthController extends Controller
                 ->lockForUpdate()
                 ->first();
 
-            if (!$fetch) {
+            if (! $fetch) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Invalid or expired OTP'
+                    'message' => 'Invalid or expired OTP',
                 ], 422);
             }
             $fetch->is_used = true;
@@ -266,17 +256,17 @@ class AuthController extends Controller
                 'message' => 'OTP verified successfully',
                 'data' => [
                     'user_id' => $user->id,
-                    'token' => $token
-                ]
+                    'token' => $token,
+                ],
             ]);
         } catch (Throwable $e) {
 
             Log::error('Otp verification Problem', [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
 
             return response()->json([
-                'message' => 'Authentication service unavailable'
+                'message' => 'Authentication service unavailable',
             ], 500);
         }
     }
@@ -284,21 +274,21 @@ class AuthController extends Controller
     public function resendOTP(Request $request)
     {
         $validated = $request->validate([
-            'id' => ['required', 'string']
+            'id' => ['required', 'string'],
         ]);
 
         try {
 
-             $user = User::where('id', $validated['id'])->first();
+            $user = User::where('id', $validated['id'])->first();
 
-             if(!$user){
-                
+            if (! $user) {
+
                 return response()->json([
                     'status' => false,
-                    'message' => 'User not valid'
+                    'message' => 'User not valid',
                 ], 401);
-            
-             }
+
+            }
 
             $otp = random_int(100000, 999999);
             $sendOTP = UserOTP::create([
@@ -306,7 +296,6 @@ class AuthController extends Controller
                 'otp' => $otp,
                 'expires_at' => now()->addMinutes(30),
             ]);
-           
 
             if ($sendOTP) {
 
@@ -319,12 +308,12 @@ class AuthController extends Controller
                 'data' => [
                     'id' => $user->id,
                     // 'token' => $token
-                ]
+                ],
             ]);
         } catch (Throwable $e) {
 
             Log::error('Resend Otp verification Problem', [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
 
             return response()->json([
@@ -340,12 +329,12 @@ class AuthController extends Controller
             'password' => ['required', 'string', 'min:8'],
         ]);
 
-        $key = 'login:' . $request->ip();
+        $key = 'login:'.$request->ip();
 
         // 🚨 Rate limiting (very important for high traffic & brute force protection)
         if (RateLimiter::tooManyAttempts($key, 10)) {
             return response()->json([
-                'message' => 'Too many login attempts. Try again later.'
+                'message' => 'Too many login attempts. Try again later.',
             ], 429);
         }
 
@@ -360,15 +349,15 @@ class AuthController extends Controller
                 ->first();
 
             // ❌ Avoid revealing whether email exists
-            if (!$user || !Hash::check($request->password, $user->password)) {
+            if (! $user || ! Hash::check($request->password, $user->password)) {
                 return response()->json([
-                    'message' => 'Invalid credentials'
+                    'message' => 'Invalid credentials',
                 ], 401);
             }
 
             if ($user->email_verified_at === null) {
                 return response()->json([
-                    'message' => 'Email address Not verified'
+                    'message' => 'Email address Not verified',
                 ], 401);
             }
 
@@ -387,17 +376,17 @@ class AuthController extends Controller
                     'username' => $user->username,
                     'email' => $user->email,
                     'access_token' => $token,
-                ]
+                ],
             ]);
         } catch (Throwable $e) {
 
             Log::error('Login failed', [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
 
             return response()->json([
                 'message' => 'Authentication service unavailable',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -408,9 +397,9 @@ class AuthController extends Controller
 
             $user = $request->user();
 
-            if (!$user) {
+            if (! $user) {
                 return response()->json([
-                    'message' => 'Unauthenticated'
+                    'message' => 'Unauthenticated',
                 ], 401);
             }
 
@@ -427,16 +416,16 @@ class AuthController extends Controller
             }
 
             return response()->json([
-                'message' => 'Logged out successfully'
+                'message' => 'Logged out successfully',
             ]);
         } catch (Throwable $e) {
 
             Log::error('Logout failed', [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
 
             return response()->json([
-                'message' => 'Logout failed'
+                'message' => 'Logout failed',
             ], 500);
         }
     }

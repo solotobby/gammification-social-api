@@ -17,7 +17,6 @@ class Transaction extends Model
         'customer' => 'array',
     ];
 
-
     public function user()
     {
         return $this->belongsTo(User::class);

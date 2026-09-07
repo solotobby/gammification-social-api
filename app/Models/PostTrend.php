@@ -15,12 +15,12 @@ class PostTrend extends Model
         'trend_id',
     ];
 
-     public function post()
+    public function post()
     {
         return $this->belongsTo(Post::class);
     }
-    
-     public function trend()
+
+    public function trend()
     {
         return $this->belongsTo(Trend::class);
     }

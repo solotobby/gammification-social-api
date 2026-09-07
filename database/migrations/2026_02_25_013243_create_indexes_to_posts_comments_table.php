@@ -16,7 +16,9 @@ return new class extends Migration
         Schema::table('posts', function (Blueprint $table) {
             $table->index('created_at', 'posts_created_at_index');
             $table->index(['created_at', 'likes', 'comments', 'comment_external', 'views_external', 'has_video', 'has_images'], 'posts_trending_index');
-            $table->fullText('content', 'posts_content_fulltext'); // MySQL FULLTEXT
+            if (DB::getDriverName() !== 'sqlite') {
+                $table->fullText('content', 'posts_content_fulltext'); // MySQL FULLTEXT
+            }
         });
 
         // 2️⃣ trending_topics table
@@ -41,7 +43,7 @@ return new class extends Migration
                 $table->index(['post_id', 'user_id', 'poster_user_id', 'type'], 'views_post_id_index');
             });
         }
-        
+
     }
 
     /**
@@ -53,7 +55,9 @@ return new class extends Migration
         Schema::table('posts', function (Blueprint $table) {
             $table->dropIndex('posts_created_at_index');
             $table->dropIndex('posts_trending_index');
-            $table->dropFullText('posts_content_fulltext');
+            if (DB::getDriverName() !== 'sqlite') {
+                $table->dropFullText('posts_content_fulltext');
+            }
         });
 
         Schema::table('trending_topics', function (Blueprint $table) {

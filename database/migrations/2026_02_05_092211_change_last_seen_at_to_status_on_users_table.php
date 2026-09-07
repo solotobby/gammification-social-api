@@ -21,7 +21,7 @@ return new class extends Migration
             $table->enum('status', [
                 'ACTIVE',
                 'SHADOW_BANNED',
-                'BLOCKED'
+                'BLOCKED',
             ])->default('ACTIVE')->after('email_verified_at');
         });
     }

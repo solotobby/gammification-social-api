@@ -9,11 +9,8 @@ use App\Models\UserLevel;
 use App\Notifications\GeneralNotification;
 use Illuminate\Support\Facades\DB;
 
-
-
 class LikeService
 {
-
     public function toggle(string $postUnicode, User $user): void
     {
         $post = Post::with('user')
@@ -32,12 +29,12 @@ class LikeService
                 // 👎 Unlike
                 $existingLike->delete();
                 $post->decrement('likes');
-                
+
                 // userActivity('unlike');
 
                 return;
             }
-            //manage account monetization 
+            // manage account monetization
             $type = match (true) {
                 $isSelfLike => 'self-like',
                 $user->status === 'SHADOW_BANNED' => 'self-like',
@@ -46,18 +43,18 @@ class LikeService
 
             // ❤️ Like
             $post->likes()->create([
-                'user_id'        => $user->id,
+                'user_id' => $user->id,
                 'poster_user_id' => $post->user_id,
-                'is_paid'        => false,
-                'amount'         => $this->calculateUniqueEarningPerLike($user->id),
-                'type'           => $type, //$isSelfLike ? 'self-like' : 'like',
+                'is_paid' => false,
+                'amount' => $this->calculateUniqueEarningPerLike($user->id),
+                'type' => $type, // $isSelfLike ? 'self-like' : 'like',
             ]);
 
             $post->increment('likes');
 
             // 🔔 Notify post owner (skip self-like)
             if (! $isSelfLike) {
-                
+
                 // $post->user->notify(
                 //     (new GeneralNotification([
                 //         'title'   => displayName($user->name) . ' liked your post',
@@ -103,8 +100,4 @@ class LikeService
             return 0.0004;
         }
     }
-
-
 }
-
-

@@ -65,7 +65,7 @@ class AnalyticsController extends Controller
         }
 
         $request->validate([
-            'year' => ['required', 'integer', 'min:2020', 'max:' . (now()->year + 1)],
+            'year' => ['required', 'integer', 'min:2020', 'max:'.(now()->year + 1)],
             'month' => ['required', 'integer', 'min:1', 'max:12'],
         ]);
 
@@ -99,7 +99,7 @@ class AnalyticsController extends Controller
         }
 
         $request->validate([
-            'year' => ['sometimes', 'integer', 'min:2020', 'max:' . (now()->year + 1)],
+            'year' => ['sometimes', 'integer', 'min:2020', 'max:'.(now()->year + 1)],
         ]);
 
         try {

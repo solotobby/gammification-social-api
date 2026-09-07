@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('community_posts', function (Blueprint $table) {
-             $table->unsignedInteger('views_count')->default(0)->after('content');
+            $table->unsignedInteger('views_count')->default(0)->after('content');
             $table->unsignedInteger('likes_count')->default(0)->after('views_count');
             $table->unsignedInteger('comments_count')->default(0)->after('likes_count');
         });

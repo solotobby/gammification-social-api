@@ -10,9 +10,9 @@ class Trend extends Model
 {
     use HasFactory, UuidTrait;
 
-        protected $fillable = [
-            'name',
-            'description',
-            'status',
-        ];
+    protected $fillable = [
+        'name',
+        'description',
+        'status',
+    ];
 }

@@ -14,16 +14,16 @@ return new class extends Migration
         Schema::create('post_hashtag', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('post_id');
-                // ->constrained()
-                // ->cascadeOnDelete();
+            // ->constrained()
+            // ->cascadeOnDelete();
 
             $table->uuid('hashtag_id');
-                // ->constrained()
-                // ->cascadeOnDelete();
+            // ->constrained()
+            // ->cascadeOnDelete();
 
             $table->unique([
                 'post_id',
-                'hashtag_id'
+                'hashtag_id',
             ]);
             $table->timestamps();
         });

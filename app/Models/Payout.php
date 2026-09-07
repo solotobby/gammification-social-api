@@ -12,9 +12,8 @@ class Payout extends Model
 
     protected $fillable = ['user_id', 'engagement_monthly_stats_id', 'level', 'month', 'date', 'amount', 'total_engagement', 'currency', 'status', 'type'];
 
-    public function user(){
+    public function user()
+    {
         return $this->belongsTo(User::class, 'user_id');
     }
-
-
 }

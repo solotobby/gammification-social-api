@@ -11,6 +11,4 @@ class Timeline extends Model
     use HasFactory, UuidTrait;
 
     protected $fillable = ['user_id', 'content', 'views', 'clicks', 'likes_count', 'comment_count', 'status'];
-
-
 }

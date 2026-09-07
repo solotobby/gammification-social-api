@@ -34,7 +34,7 @@ class LevelUpgradeService
             ->first();
 
         $levels = $this->orderedLevels()->map(function (Level $level) use (
-            $user,
+
             $currency,
             $symbol,
             $currentLevel,

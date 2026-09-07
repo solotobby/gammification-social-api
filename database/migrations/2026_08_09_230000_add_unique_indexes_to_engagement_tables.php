@@ -55,6 +55,10 @@ return new class extends Migration
 
     private function dedupeTable(string $table): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::statement("
             DELETE t1 FROM {$table} t1
             INNER JOIN {$table} t2
@@ -66,6 +70,17 @@ return new class extends Migration
 
     private function indexExists(string $table, string $indexName): bool
     {
+        if (DB::getDriverName() === 'sqlite') {
+            $indexes = DB::select("PRAGMA index_list(`{$table}`)");
+            foreach ($indexes as $index) {
+                if (($index->name ?? null) === $indexName) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         $rows = DB::select("SHOW INDEX FROM `{$table}` WHERE Key_name = ?", [$indexName]);
 
         return count($rows) > 0;

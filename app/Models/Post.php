@@ -32,6 +32,11 @@ class Post extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function gifts()
+    {
+        return $this->morphMany(PostGift::class, 'giftable');
+    }
+
     public function images()
     {
         return $this->hasMany(PostImages::class);
@@ -52,7 +57,7 @@ class Post extends Model
             $status = match (true) {
                 $statuses->isEmpty() => 'processing',
                 $statuses->contains('failed') => 'failed',
-                $statuses->every(fn($s) => $s === 'completed') => 'completed',
+                $statuses->every(fn ($s) => $s === 'completed') => 'completed',
                 default => 'processing',
             };
         } else {
@@ -61,7 +66,6 @@ class Post extends Model
 
         $this->update(['media_status' => $status]);
     }
-
 
     public function likes()
     {
@@ -84,7 +88,6 @@ class Post extends Model
     {
         return $this->belongsToMany(User::class, 'user_likes', 'post_id');
     }
-
 
     public function views()
     {
@@ -116,8 +119,6 @@ class Post extends Model
     {
         return $this->hasMany(UserComment::class);
     }
-
-
 
     public function unpaidComments()
     {
@@ -153,7 +154,6 @@ class Post extends Model
     {
         return $this->externalViews()->where('is_paid', true)->count();
     }
-
 
     public function scopeVisibleToViewer($query, User $profileOwner, ?User $viewer)
     {

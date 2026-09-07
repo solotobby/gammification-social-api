@@ -25,7 +25,7 @@ class Blog extends Model
 
         static::creating(function ($blog) {
             $blog->id = (string) Str::uuid();
-            $blog->slug = Str::slug($blog->title) . '-' . uniqid();
+            $blog->slug = Str::slug($blog->title).'-'.uniqid();
         });
     }
 
@@ -47,7 +47,7 @@ class Blog extends Model
         }
 
         if (str_starts_with($url, '//')) {
-            $url = 'https:' . $url;
+            $url = 'https:'.$url;
         }
 
         if (! preg_match('#^(https?:)?//#i', $url) && ! str_starts_with($url, 'data:')) {
@@ -55,7 +55,7 @@ class Blog extends Model
         }
 
         if (str_starts_with($url, 'http://')) {
-            $url = 'https://' . substr($url, 7);
+            $url = 'https://'.substr($url, 7);
         }
 
         if (! filter_var($url, FILTER_VALIDATE_URL)) {

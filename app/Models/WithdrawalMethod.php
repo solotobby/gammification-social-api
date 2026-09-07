@@ -12,7 +12,8 @@ class WithdrawalMethod extends Model
 
     protected $fillable = ['user_id', 'country', 'currency', 'payment_method', 'bank_name', 'account_number', 'bank_code', 'account_name', 'recipient_code', 'paypal_email', 'usdt_wallet', 'is_active'];
 
-    public function user(){
+    public function user()
+    {
         return $this->belongsTo(User::class, 'user_id');
     }
 }

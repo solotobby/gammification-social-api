@@ -13,11 +13,11 @@ return new class extends Migration
     {
         Schema::create('community_post_comments', function (Blueprint $table) {
             $table->uuid('id')->primary();
-             $table->foreignUuid('community_post_id')->constrained('community_posts')->cascadeOnDelete();
+            $table->foreignUuid('community_post_id')->constrained('community_posts')->cascadeOnDelete();
             $table->foreignUuid('user_id')->constrained('users')->cascadeOnDelete();
             $table->text('content');
             $table->timestamps();
- 
+
             $table->index(['community_post_id', 'created_at']);
         });
     }

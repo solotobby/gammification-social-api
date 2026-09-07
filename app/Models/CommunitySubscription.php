@@ -11,6 +11,7 @@ class CommunitySubscription extends Model
     use HasFactory, UuidTrait;
 
     protected $keyType = 'string';
+
     public $incrementing = false;
 
     protected $fillable = [
@@ -41,8 +42,6 @@ class CommunitySubscription extends Model
         'cancelled_at' => 'datetime',
         'gateway_meta' => 'array',
     ];
-
-    
 
     public function community()
     {

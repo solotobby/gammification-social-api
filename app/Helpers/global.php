@@ -7,6 +7,7 @@ use App\Models\UserLike;
 use App\Models\UserView;
 use App\Models\Wallet;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 
 if (! function_exists('resolveApiUser')) {
     /**
@@ -68,6 +69,23 @@ if (! function_exists('userLevel')) {
     }
 }
 
+if (! function_exists('canReceiveGifts')) {
+    function canReceiveGifts($user = null): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+
+        if ($user instanceof User) {
+            $level = normalizeUserLevel(userLevel($user->id));
+
+            return in_array($level, ['Basic', 'Creator', 'Influencer'], true);
+        }
+
+        return false;
+    }
+}
+
 if (! function_exists('userBaseCurrency')) {
     function userBaseCurrency($userId = null): ?string
     {
@@ -90,11 +108,11 @@ if (! function_exists('convertCurrency')) {
         $to = strtoupper((string) $to);
 
         if (! isset($rates[$from])) {
-            throw new \InvalidArgumentException("Unsupported currency: {$from}");
+            throw new InvalidArgumentException("Unsupported currency: {$from}");
         }
 
         if (! isset($rates[$to])) {
-            throw new \InvalidArgumentException("Unsupported currency: {$to}");
+            throw new InvalidArgumentException("Unsupported currency: {$to}");
         }
 
         if ($from === $to) {
@@ -125,7 +143,7 @@ if (! function_exists('communityMinimumPrice')) {
 
         try {
             return convertCurrency($baseUsd, 'USD', $currency);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return (float) ($minimums['USD'] ?? $baseUsd);
         }
     }
@@ -164,7 +182,7 @@ if (! function_exists('bankList')) {
         $url = rtrim((string) config('services.env.kora_base_url', 'https://api.korapay.com/merchant/api/v1'), '/')
             .'/misc/banks?countryCode=NG';
 
-        $res = Illuminate\Support\Facades\Http::withHeaders([
+        $res = Http::withHeaders([
             'Accept' => 'application/json',
             'Content-Type' => 'application/json',
             'Authorization' => 'Bearer '.config('services.env.kora_pub'),
@@ -223,7 +241,6 @@ if (! function_exists('estimatedEarnings')) {
         return (float) round(convertToBaseCurrency($total, $currency), 5);
     }
 }
-
 
 if (! function_exists('viewsAmountCalculator')) {
     function viewsAmountCalculator($postId, ?string $userId = null): float

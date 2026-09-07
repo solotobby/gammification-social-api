@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('reference')->nullable();
             $table->string('event');
             $table->longText('content');
-            $table->string('type')->nullable(); //indidual or agent
+            $table->string('type')->nullable(); // indidual or agent
             $table->string('name')->nullable();
             $table->string('email')->nullable();
             $table->string('level')->nullable();

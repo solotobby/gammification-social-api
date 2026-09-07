@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('communities', function (Blueprint $table) {
-             $table->string('currency', 3)->default('NGN')->after('monthly_fee');
+            $table->string('currency', 3)->default('NGN')->after('monthly_fee');
         });
     }
 

@@ -2,20 +2,20 @@
 
 namespace App\Services;
 
-
-use App\Models\User;
 use App\Models\Comment;
 use App\Models\Post;
+use App\Models\User;
 use App\Models\UserComment;
 use App\Models\UserLevel;
-use Illuminate\Support\Facades\DB;
 use App\Notifications\GeneralNotification;
+use Illuminate\Support\Facades\DB;
 
 class CommentService
 {
-
     public $postId;
+
     public $user;
+
     public $message;
 
     public function addComment($postId, User $user, $message)
@@ -56,17 +56,16 @@ class CommentService
 
                 // 4️⃣ Create a unique comment entry
                 UserComment::create([
-                    'user_id'        => $authUserId,
-                    'post_id'        => $postId,
-                    'is_paid'        => false,
-                    'amount'         => $this->calculateUniqueEarningPerComment($authUserId),
+                    'user_id' => $authUserId,
+                    'post_id' => $postId,
+                    'is_paid' => false,
+                    'amount' => $this->calculateUniqueEarningPerComment($authUserId),
                     'poster_user_id' => $post->user_id,
-                    'type'           => $type, //$isSelfComment ? 'self-comment' : 'comment',
+                    'type' => $type, // $isSelfComment ? 'self-comment' : 'comment',
                 ]);
 
                 // 5️⃣ Atomic increment
                 Post::whereKey($postId)->increment('comments');
-
 
                 // 6️⃣ Notify post owner (skip self-comment)
                 // if (! $isSelfComment) {
@@ -78,7 +77,6 @@ class CommentService
                 //         'url'     => url('timeline/' . $post->id),
                 //     ]));
                 // }
-
 
             } else {
 

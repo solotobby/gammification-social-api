@@ -16,8 +16,8 @@ return new class extends Migration
                 ->nullable()
                 ->after('fee_payer')
                 ->comment('Only meaningful when type=paid. One-off: single one-time '
-                    . 'payment to join. Subscription: recurring charge on '
-                    . 'billing_interval.');
+                    .'payment to join. Subscription: recurring charge on '
+                    .'billing_interval.');
 
             $table->enum('billing_interval', ['weekly', 'monthly', 'quarterly', 'biannual', 'annual'])
                 ->nullable()

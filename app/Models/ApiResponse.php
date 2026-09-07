@@ -9,5 +9,12 @@ class ApiResponse extends Model
 {
     use HasFactory;
 
-    protected  $fillable = ['response'];
+    protected $fillable = ['response'];
+
+    protected function casts(): array
+    {
+        return [
+            'response' => 'array',
+        ];
+    }
 }

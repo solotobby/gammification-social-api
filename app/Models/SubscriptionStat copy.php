@@ -12,10 +12,8 @@ class SubscriptionStat extends Model
 
     protected $fillable = ['user_id', 'level_id', 'plan_name', 'amount', 'currency', 'start_date', 'end_date'];
 
-    public function user(){
+    public function user()
+    {
         return $this->belongsTo(User::class);
     }
-
-
-
 }

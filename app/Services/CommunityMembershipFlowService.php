@@ -7,9 +7,9 @@ use App\Models\CommunityInvite;
 use App\Models\CommunityJoinRequest;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 class CommunityMembershipFlowService
@@ -321,6 +321,166 @@ class CommunityMembershipFlowService
         }
 
         return ['action' => 'invite_revoked'];
+    }
+
+    public function listMembers(User $viewer, string $communityId, ?string $search = null, ?string $role = null, int $perPage = 15): LengthAwarePaginator
+    {
+        $community = $this->findCommunity($communityId);
+
+        if (! $this->canViewMembers($community, $viewer)) {
+            throw new AuthorizationException('You do not have permission to view members of this community.');
+        }
+
+        $query = $community->members()
+            ->when($search, function ($q) use ($search) {
+                $term = '%'.trim($search).'%';
+                $q->where(function ($qq) use ($term) {
+                    $qq->where('users.name', 'like', $term)
+                        ->orWhere('users.username', 'like', $term);
+                });
+            })
+            ->when($role, function ($q) use ($role) {
+                $q->wherePivot('role', $role);
+            })
+            ->orderByDesc('community_users.created_at');
+
+        $paginator = $query->paginate($perPage);
+
+        $paginator->getCollection()->transform(function (User $member) {
+            return [
+                'id' => $member->id,
+                'username' => $member->username,
+                'name' => $member->name,
+                'avatar' => $member->avatar,
+                'role' => $member->pivot?->role ?? 'member',
+                'status' => $member->pivot?->status ?? 'active',
+                'joined_at' => $member->pivot?->created_at?->toIso8601String(),
+            ];
+        });
+
+        return $paginator;
+    }
+
+    public function listBannedMembers(User $viewer, string $communityId, int $perPage = 15): LengthAwarePaginator
+    {
+        $community = $this->findCommunity($communityId);
+        $this->assertCanManage($community, $viewer);
+
+        $paginator = $community->bannedMembers()->orderByDesc('community_users.created_at')->paginate($perPage);
+
+        $paginator->getCollection()->transform(function (User $member) {
+            return [
+                'id' => $member->id,
+                'username' => $member->username,
+                'name' => $member->name,
+                'avatar' => $member->avatar,
+                'role' => $member->pivot?->role ?? 'member',
+                'status' => $member->pivot?->status ?? 'banned',
+                'banned_at' => $member->pivot?->updated_at?->toIso8601String(),
+            ];
+        });
+
+        return $paginator;
+    }
+
+    public function promoteToAdmin(User $owner, string $communityId, string $targetUserId): array
+    {
+        $community = $this->findCommunity($communityId);
+        $this->assertIsOwner($community, $owner);
+
+        if ($targetUserId === (string) $community->user_id) {
+            throw new InvalidArgumentException('Community owner is already the highest authority.');
+        }
+
+        $exists = $community->members()->where('users.id', $targetUserId)->exists();
+        if (! $exists) {
+            throw new InvalidArgumentException('User is not an active member of this community.');
+        }
+
+        $community->members()->updateExistingPivot($targetUserId, ['role' => 'admin']);
+
+        return ['action' => 'promoted', 'role' => 'admin', 'user_id' => $targetUserId];
+    }
+
+    public function demoteToMember(User $owner, string $communityId, string $targetUserId): array
+    {
+        $community = $this->findCommunity($communityId);
+        $this->assertIsOwner($community, $owner);
+
+        if ($targetUserId === (string) $community->user_id) {
+            throw new InvalidArgumentException('Cannot demote the community owner.');
+        }
+
+        $exists = $community->members()->where('users.id', $targetUserId)->exists();
+        if (! $exists) {
+            throw new InvalidArgumentException('User is not an active member of this community.');
+        }
+
+        $community->members()->updateExistingPivot($targetUserId, ['role' => 'member']);
+
+        return ['action' => 'demoted', 'role' => 'member', 'user_id' => $targetUserId];
+    }
+
+    public function banMember(User $actor, string $communityId, string $targetUserId): array
+    {
+        $community = $this->findCommunity($communityId);
+        $this->assertCanManage($community, $actor);
+
+        if ($targetUserId === (string) $community->user_id) {
+            throw new InvalidArgumentException('You cannot ban the community owner.');
+        }
+
+        $exists = $community->members()->where('users.id', $targetUserId)->exists();
+        if (! $exists) {
+            throw new InvalidArgumentException('User is not a member of this community.');
+        }
+
+        $community->members()->updateExistingPivot($targetUserId, ['status' => 'banned']);
+
+        return ['action' => 'banned', 'user_id' => $targetUserId];
+    }
+
+    public function unbanMember(User $actor, string $communityId, string $targetUserId): array
+    {
+        $community = $this->findCommunity($communityId);
+        $this->assertCanManage($community, $actor);
+
+        $exists = $community->bannedMembers()->where('users.id', $targetUserId)->exists();
+        if (! $exists) {
+            throw new InvalidArgumentException('User is not currently banned from this community.');
+        }
+
+        $community->bannedMembers()->updateExistingPivot($targetUserId, ['status' => 'active']);
+
+        return ['action' => 'unbanned', 'user_id' => $targetUserId];
+    }
+
+    public function removeMember(User $actor, string $communityId, string $targetUserId): array
+    {
+        $community = $this->findCommunity($communityId);
+        $this->assertCanManage($community, $actor);
+
+        if ($targetUserId === (string) $community->user_id) {
+            throw new InvalidArgumentException('You cannot remove the community owner.');
+        }
+
+        $community->members()->detach($targetUserId);
+
+        return ['action' => 'removed', 'user_id' => $targetUserId];
+    }
+
+    private function canViewMembers(Community $community, User $user): bool
+    {
+        return $community->type === 'public'
+            || $this->communityService->isMemberPublic($community, $user->id)
+            || $this->communityService->isOwnerPublic($community, $user->id);
+    }
+
+    private function assertIsOwner(Community $community, User $user): void
+    {
+        if (! $this->communityService->isOwnerPublic($community, $user->id)) {
+            throw new AuthorizationException('Only the community owner can perform this action.');
+        }
     }
 
     private function findCommunity(string $communityId): Community

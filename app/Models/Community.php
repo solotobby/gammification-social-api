@@ -159,6 +159,11 @@ class Community extends Model
         return ! $this->isArchived();
     }
 
+    public function getLogoAttribute(): ?string
+    {
+        return $this->image;
+    }
+
     public function getPublicUrlAttribute(): string
     {
         return route('community.public', $this);

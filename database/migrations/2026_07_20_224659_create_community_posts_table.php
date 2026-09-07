@@ -17,7 +17,7 @@ return new class extends Migration
             $table->foreignUuid('user_id')->constrained('users')->cascadeOnDelete();
             $table->longText('content')->nullable();
             $table->timestamps();
- 
+
             $table->index(['community_id', 'created_at']);
         });
     }

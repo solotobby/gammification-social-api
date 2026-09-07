@@ -9,26 +9,25 @@ use Carbon\Carbon;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Laravel\Passport\HasApiTokens;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
+use Laravel\Passport\HasApiTokens;
 
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, HasApiTokens, UuidTrait;
+    use HasApiTokens, HasFactory, Notifiable, UuidTrait;
 
     /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
      */
-
     protected $fillable = [
         'name',
         'username',
@@ -39,14 +38,13 @@ class User extends Authenticatable
         'password',
         'access_code_id',
         'level_id',
-        'status'
+        'status',
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
     ];
-
 
     protected function casts(): array
     {
@@ -62,7 +60,6 @@ class User extends Authenticatable
         return $this->hasOne(Wallet::class, 'user_id');
     }
 
-
     public function activeLevel()
     {
 
@@ -70,6 +67,7 @@ class User extends Authenticatable
             ->where('status', 'active')
             ->where('next_payment_date', '>', Carbon::now());
     }
+
     public function profile()
     {
         return $this->hasOne(Profile::class, 'user_id');
@@ -135,7 +133,7 @@ class User extends Authenticatable
         // Escape LIKE wildcard characters in user input so literal % or _ in a
         // search term doesn't get treated as a wildcard.
         $escaped = addcslashes($term, '%_\\');
-        $like = '%' . $escaped . '%';
+        $like = '%'.$escaped.'%';
 
         return $query->where(function ($q) use ($like) {
             $q->where('name', 'like', $like)

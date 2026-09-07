@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::table('user_comments', function (Blueprint $table) {
             $table->decimal('amount', 10, 5)->default(0)->after('is_paid');
             $table->uuid('poster_user_id')->nullable()->after('post_id');
-            
+
             $table->index('poster_user_id');
         });
     }
@@ -28,7 +28,7 @@ return new class extends Migration
             $table->dropIndex(['poster_user_id']);
             $table->dropColumn('amount');
             $table->dropColumn('poster_user_id');
-            
+
         });
     }
 };

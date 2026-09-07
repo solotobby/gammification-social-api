@@ -14,6 +14,5 @@ class AccessCode extends Model
     public function level()
     {
         return $this->belongsTo(Level::class, 'level_id');
-    }   
-
+    }
 }

@@ -12,12 +12,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('community_users', function (Blueprint $table) {
-             $table->enum('status', ['active', 'banned'])
+            $table->enum('status', ['active', 'banned'])
                 ->default('active')
                 ->after('role')
                 ->comment('Banned members keep their pivot row (for history/unban) '
-                    . 'but are excluded from active member counts, is_member checks, '
-                    . 'and the feed.');
+                    .'but are excluded from active member counts, is_member checks, '
+                    .'and the feed.');
         });
     }
 
@@ -27,7 +27,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('community_users', function (Blueprint $table) {
-             $table->dropColumn('status');
+            $table->dropColumn('status');
         });
     }
 };

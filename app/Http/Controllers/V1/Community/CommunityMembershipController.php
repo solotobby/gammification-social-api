@@ -220,6 +220,151 @@ class CommunityMembershipController extends Controller
     }
 
     /**
+     * GET /v1/communities/{id}/members — list community members.
+     */
+    public function members(Request $request, string $id)
+    {
+        $validated = $request->validate([
+            'search' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'role' => ['sometimes', 'nullable', 'in:owner,admin,member'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:50'],
+        ]);
+
+        return $this->respond($request, function () use ($request, $id, $validated) {
+            $members = $this->membershipFlowService->listMembers(
+                resolveApiUser($request),
+                $id,
+                $validated['search'] ?? null,
+                $validated['role'] ?? null,
+                (int) ($validated['per_page'] ?? 15),
+            );
+
+            return [
+                'message' => 'Community members',
+                'data' => $members,
+            ];
+        });
+    }
+
+    /**
+     * GET /v1/communities/{id}/members/banned — list banned members (owner/admin only).
+     */
+    public function bannedMembers(Request $request, string $id)
+    {
+        $validated = $request->validate([
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:50'],
+        ]);
+
+        return $this->respond($request, function () use ($request, $id, $validated) {
+            $banned = $this->membershipFlowService->listBannedMembers(
+                resolveApiUser($request),
+                $id,
+                (int) ($validated['per_page'] ?? 15),
+            );
+
+            return [
+                'message' => 'Banned members',
+                'data' => $banned,
+            ];
+        });
+    }
+
+    /**
+     * POST /v1/communities/{id}/members/{userId}/promote — promote member to admin (owner only).
+     */
+    public function promoteToAdmin(Request $request, string $id, string $userId)
+    {
+        return $this->respond($request, function () use ($request, $id, $userId) {
+            $result = $this->membershipFlowService->promoteToAdmin(
+                resolveApiUser($request),
+                $id,
+                $userId,
+            );
+
+            return [
+                'message' => 'Member promoted to admin',
+                'data' => $result,
+            ];
+        });
+    }
+
+    /**
+     * POST /v1/communities/{id}/members/{userId}/demote — demote admin to member (owner only).
+     */
+    public function demoteToMember(Request $request, string $id, string $userId)
+    {
+        return $this->respond($request, function () use ($request, $id, $userId) {
+            $result = $this->membershipFlowService->demoteToMember(
+                resolveApiUser($request),
+                $id,
+                $userId,
+            );
+
+            return [
+                'message' => 'Admin demoted to member',
+                'data' => $result,
+            ];
+        });
+    }
+
+    /**
+     * POST /v1/communities/{id}/members/{userId}/ban — ban member (owner/admin).
+     */
+    public function banMember(Request $request, string $id, string $userId)
+    {
+        return $this->respond($request, function () use ($request, $id, $userId) {
+            $result = $this->membershipFlowService->banMember(
+                resolveApiUser($request),
+                $id,
+                $userId,
+            );
+
+            return [
+                'message' => 'Member has been banned',
+                'data' => $result,
+            ];
+        });
+    }
+
+    /**
+     * POST /v1/communities/{id}/members/{userId}/unban — unban member (owner/admin).
+     */
+    public function unbanMember(Request $request, string $id, string $userId)
+    {
+        return $this->respond($request, function () use ($request, $id, $userId) {
+            $result = $this->membershipFlowService->unbanMember(
+                resolveApiUser($request),
+                $id,
+                $userId,
+            );
+
+            return [
+                'message' => 'Member unbanned successfully',
+                'data' => $result,
+            ];
+        });
+    }
+
+    /**
+     * DELETE /v1/communities/{id}/members/{userId} — remove/kick member (owner/admin).
+     */
+    public function removeMember(Request $request, string $id, string $userId)
+    {
+        return $this->respond($request, function () use ($request, $id, $userId) {
+            $result = $this->membershipFlowService->removeMember(
+                resolveApiUser($request),
+                $id,
+                $userId,
+            );
+
+            return [
+                'message' => 'Member removed from community',
+                'data' => $result,
+            ];
+        });
+    }
+
+    /**
      * @param  callable(): array{message: string, data: mixed}  $callback
      */
     private function respond(Request $request, callable $callback)

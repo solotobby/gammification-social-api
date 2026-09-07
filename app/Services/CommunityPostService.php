@@ -10,6 +10,8 @@ use App\Models\CommunityPostComment;
 use App\Models\CommunityPostLike;
 use App\Models\CommunityPostView;
 use App\Models\User;
+use App\Support\StoredMedia;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\UploadedFile;
@@ -33,12 +35,12 @@ class CommunityPostService
 
     public function __construct(protected CommunityService $communityService) {}
 
-    public function listFeed(User $user, string $communityId, int $perPage = self::POSTS_PER_PAGE): LengthAwarePaginator
+    public function listFeed(User $user, string $communityId, int $perPage = self::POSTS_PER_PAGE, ?string $search = null): LengthAwarePaginator
     {
         $community = $this->findCommunity($communityId);
         $this->communityService->assertCanViewFeed($community, $user);
 
-        $paginator = CommunityPost::query()
+        $query = CommunityPost::query()
             ->where('community_id', $community->id)
             ->with([
                 'user:id,username,name,avatar',
@@ -48,14 +50,78 @@ class CommunityPostService
                     ->latest()
                     ->limit(self::COMMENTS_PREVIEW),
             ])
-            ->latest()
-            ->paginate($perPage);
+            ->when($search, function ($q) use ($search) {
+                $term = '%'.trim($search).'%';
+                $q->where(function ($qq) use ($term) {
+                    $qq->where('content', 'like', $term)
+                        ->orWhereHas('user', fn ($u) => $u->where('name', 'like', $term)->orWhere('username', 'like', $term));
+                });
+            })
+            ->latest();
+
+        $paginator = $query->paginate($perPage);
 
         $paginator->getCollection()->transform(
             fn (CommunityPost $post) => $this->formatPost($post, $user, includeCommentsPreview: true),
         );
 
         return $paginator;
+    }
+
+    public function deletePost(User $user, string $communityId, string $postId): array
+    {
+        $community = $this->findCommunity($communityId);
+        $post = $this->findPost($community, $postId);
+
+        $canDelete = (string) $post->user_id === (string) $user->id
+            || $this->communityService->canManagePublic($community, $user->id);
+
+        if (! $canDelete) {
+            throw new AuthorizationException('You are not authorized to delete this post.');
+        }
+
+        foreach ($post->media as $media) {
+            if ($media->path) {
+                StoredMedia::delete($media->path, 'spaces');
+            }
+            if ($media->thumbnail_path && $media->thumbnail_path !== $media->path) {
+                StoredMedia::delete($media->thumbnail_path, 'spaces');
+            }
+        }
+
+        $post->delete();
+
+        return [
+            'deleted' => true,
+            'post_id' => $postId,
+        ];
+    }
+
+    public function deleteComment(User $user, string $communityId, string $postId, string $commentId): array
+    {
+        $community = $this->findCommunity($communityId);
+        $post = $this->findPost($community, $postId);
+
+        $comment = CommunityPostComment::where('community_post_id', $post->id)->find($commentId);
+        if (! $comment) {
+            throw new ModelNotFoundException('Comment not found.');
+        }
+
+        $canDelete = (string) $comment->user_id === (string) $user->id
+            || (string) $post->user_id === (string) $user->id
+            || $this->communityService->canManagePublic($community, $user->id);
+
+        if (! $canDelete) {
+            throw new AuthorizationException('You are not authorized to delete this comment.');
+        }
+
+        $comment->delete();
+        $post->decrement('comments_count');
+
+        return [
+            'deleted' => true,
+            'comment_id' => $commentId,
+        ];
     }
 
     public function listComments(

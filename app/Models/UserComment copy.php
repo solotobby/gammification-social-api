@@ -12,11 +12,13 @@ class UserComment extends Model
 
     protected $fillable = ['user_id', 'post_id', 'amount', 'poster_user_id', 'is_paid', 'type'];
 
-    public function user(){
+    public function user()
+    {
         return $this->belongsTo(User::class);
     }
 
-    public function post(){
+    public function post()
+    {
         return $this->belongsTo(Post::class);
-    }   
+    }
 }

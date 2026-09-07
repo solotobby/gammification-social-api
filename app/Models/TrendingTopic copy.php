@@ -25,6 +25,6 @@ class TrendingTopic extends Model
 
     public function getUrlAttribute()
     {
-        return url('/search?q=' . urlencode($this->phrase));
+        return url('/search?q='.urlencode($this->phrase));
     }
 }

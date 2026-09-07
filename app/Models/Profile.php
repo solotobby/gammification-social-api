@@ -16,5 +16,4 @@ class Profile extends Model
         'date_of_birth' => 'date',
         'username_updated_at' => 'datetime',
     ];
-
 }

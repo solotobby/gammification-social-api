@@ -12,7 +12,6 @@ class UserLike extends Model
 
     protected $fillable = ['user_id', 'post_id', 'poster_user_id', 'is_paid', 'amount', 'type'];
 
-
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -22,5 +21,4 @@ class UserLike extends Model
     {
         return $this->belongsTo(Post::class);
     }
-
 }

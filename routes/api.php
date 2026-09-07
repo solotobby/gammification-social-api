@@ -2,11 +2,15 @@
 
 use App\Http\Controllers\V1\AuthController;
 use App\Http\Controllers\V1\Blog\BlogController;
+use App\Http\Controllers\V1\Community\CommunityAnalyticsController;
 use App\Http\Controllers\V1\Community\CommunityController;
 use App\Http\Controllers\V1\Community\CommunityMembershipController;
+use App\Http\Controllers\V1\Community\CommunityPaymentController;
 use App\Http\Controllers\V1\Community\CommunityPostController;
 use App\Http\Controllers\V1\Earnings\AnalyticsController;
 use App\Http\Controllers\V1\Explore\ExploreController;
+use App\Http\Controllers\V1\PayKoin\PayKoinController;
+use App\Http\Controllers\V1\PayKoin\PostGiftController;
 use App\Http\Controllers\V1\Rolls\RollsController;
 use App\Http\Controllers\V1\Timeline\BookmarkController;
 use App\Http\Controllers\V1\Timeline\FeedController;
@@ -55,7 +59,13 @@ Route::prefix('v1')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])
         ->middleware('throttle:20,1');
 
-    Route::post('/webhooks/flutterwave', [PaymentWebhookController::class, 'flutterwave']);
+    Route::post('/webhooks/flutterwave', [PaymentWebhookController::class, 'flutterwave'])->name('flutterwave.webhook');
+    Route::post('/webhooks/korapay', [PaymentWebhookController::class, 'korapay'])->name('korapay.webhook');
+
+    // Public Gift & PayKoin catalog
+    Route::get('/gifts', [PostGiftController::class, 'index']);
+    Route::get('/gifts/post/{type}/{id}', [PostGiftController::class, 'postGifts']);
+    Route::get('/paykoin/rates', [PayKoinController::class, 'rates']);
 
     Route::post('/logout', [AuthController::class, 'logout'])
         ->middleware(['auth:api,web', 'throttle:60,1']);
@@ -66,6 +76,18 @@ Route::prefix('v1')->group(function () {
     });
 
     Route::middleware('auth:api,web')->group(function () {
+
+        // PayKoin
+        Route::prefix('paykoin')->group(function () {
+            Route::get('/balance', [PayKoinController::class, 'balance']);
+            Route::post('/topup', [PayKoinController::class, 'topup']);
+            Route::get('/topup/status', [PayKoinController::class, 'topupStatus']);
+            Route::post('/convert', [PayKoinController::class, 'convert']);
+            Route::get('/transactions', [PayKoinController::class, 'transactions']);
+        });
+
+        // Post Gifts
+        Route::post('/gifts/send', [PostGiftController::class, 'send']);
 
         Route::prefix('user')->group(function () {
             Route::get('/me', [UserController::class, 'me']);
@@ -127,25 +149,45 @@ Route::prefix('v1')->group(function () {
 
         Route::prefix('communities')->group(function () {
             Route::get('/categories', [CommunityController::class, 'categories']);
+            Route::post('/fee-preview', [CommunityController::class, 'feePreview']);
             Route::get('/', [CommunityController::class, 'index']);
             Route::post('/', [CommunityController::class, 'store']);
 
             Route::post('/invites/{token}/accept', [CommunityMembershipController::class, 'acceptInviteByToken']);
-            
+
             Route::get('/c/{slug}', [CommunityController::class, 'showBySlug']);
             Route::post('/c/{slug}/join', [CommunityController::class, 'joinBySlug']);
             Route::get('/{id}', [CommunityController::class, 'show'])->whereUuid('id');
+            Route::match(['put', 'patch', 'post'], '/{id}', [CommunityController::class, 'update'])->whereUuid('id');
+            Route::delete('/{id}', [CommunityController::class, 'destroy'])->whereUuid('id');
+            Route::post('/{id}/archive', [CommunityController::class, 'archive'])->whereUuid('id');
+            Route::post('/{id}/unarchive', [CommunityController::class, 'unarchive'])->whereUuid('id');
+            Route::post('/{id}/logo', [CommunityController::class, 'updateLogo'])->whereUuid('id');
+            Route::delete('/{id}/logo', [CommunityController::class, 'removeLogo'])->whereUuid('id');
+            Route::post('/{id}/banner', [CommunityController::class, 'updateBanner'])->whereUuid('id');
+            Route::delete('/{id}/banner', [CommunityController::class, 'removeBanner'])->whereUuid('id');
 
+            // Posts & Interactions
             Route::get('/{id}/posts', [CommunityPostController::class, 'index'])->whereUuid('id');
             Route::post('/{id}/posts', [CommunityPostController::class, 'store'])->whereUuid('id');
+            Route::delete('/{id}/posts/{postId}', [CommunityPostController::class, 'destroy'])->whereUuid('id')->whereUuid('postId');
             Route::get('/{id}/posts/{postId}/comments', [CommunityPostController::class, 'comments'])->whereUuid('id')->whereUuid('postId');
-            Route::post('/{id}/posts/{postId}/like/toggle', [CommunityPostController::class, 'toggleLike'])->whereUuid('id')->whereUuid('postId');
             Route::post('/{id}/posts/{postId}/comments', [CommunityPostController::class, 'storeComment'])->whereUuid('id')->whereUuid('postId');
+            Route::delete('/{id}/posts/{postId}/comments/{commentId}', [CommunityPostController::class, 'destroyComment'])->whereUuid('id')->whereUuid('postId')->whereUuid('commentId');
+            Route::post('/{id}/posts/{postId}/like/toggle', [CommunityPostController::class, 'toggleLike'])->whereUuid('id')->whereUuid('postId');
             Route::post('/{id}/posts/{postId}/view', [CommunityPostController::class, 'recordView'])->whereUuid('id')->whereUuid('postId');
 
+            // Membership, Invites & Moderation
             Route::post('/{id}/join', [CommunityController::class, 'join'])->whereUuid('id');
             Route::post('/{id}/join/accept-invite', [CommunityMembershipController::class, 'acceptDirectInvite'])->whereUuid('id');
             Route::post('/{id}/leave', [CommunityMembershipController::class, 'leave'])->whereUuid('id');
+            Route::get('/{id}/members', [CommunityMembershipController::class, 'members'])->whereUuid('id');
+            Route::get('/{id}/members/banned', [CommunityMembershipController::class, 'bannedMembers'])->whereUuid('id');
+            Route::post('/{id}/members/{userId}/promote', [CommunityMembershipController::class, 'promoteToAdmin'])->whereUuid('id')->whereUuid('userId');
+            Route::post('/{id}/members/{userId}/demote', [CommunityMembershipController::class, 'demoteToMember'])->whereUuid('id')->whereUuid('userId');
+            Route::post('/{id}/members/{userId}/ban', [CommunityMembershipController::class, 'banMember'])->whereUuid('id')->whereUuid('userId');
+            Route::post('/{id}/members/{userId}/unban', [CommunityMembershipController::class, 'unbanMember'])->whereUuid('id')->whereUuid('userId');
+            Route::delete('/{id}/members/{userId}', [CommunityMembershipController::class, 'removeMember'])->whereUuid('id')->whereUuid('userId');
             Route::get('/{id}/join-requests', [CommunityMembershipController::class, 'joinRequests'])->whereUuid('id');
             Route::post('/{id}/join-requests/{requestId}/approve', [CommunityMembershipController::class, 'approveJoinRequest'])->whereUuid('id');
             Route::post('/{id}/join-requests/{requestId}/deny', [CommunityMembershipController::class, 'denyJoinRequest'])->whereUuid('id');
@@ -154,6 +196,14 @@ Route::prefix('v1')->group(function () {
             Route::post('/{id}/invites/link', [CommunityMembershipController::class, 'generateLinkInvite'])->whereUuid('id');
             Route::delete('/{id}/invites/link', [CommunityMembershipController::class, 'revokeLinkInvite'])->whereUuid('id');
             Route::delete('/{id}/invites/{inviteId}', [CommunityMembershipController::class, 'revokeDirectInvite'])->whereUuid('id');
+
+            // Payments & Subscriptions
+            Route::post('/{id}/subscribe', [CommunityPaymentController::class, 'subscribe'])->whereUuid('id');
+            Route::get('/{id}/subscription/status', [CommunityPaymentController::class, 'subscriptionStatus'])->whereUuid('id');
+            Route::get('/{id}/earnings', [CommunityPaymentController::class, 'earnings'])->whereUuid('id');
+
+            // Analytics
+            Route::get('/{id}/analytics', [CommunityAnalyticsController::class, 'analytics'])->whereUuid('id');
         });
     });
 });

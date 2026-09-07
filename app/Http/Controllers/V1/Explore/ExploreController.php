@@ -7,19 +7,19 @@ use App\Services\FeedService;
 use App\Services\HashTagPost;
 use App\Services\TrendingHashTags;
 use App\Services\TrendingMembers;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Throwable;
-
 
 class ExploreController extends Controller
 {
-
     protected $trendingHashTags;
+
     protected $trendingMembers;
+
     protected $hashTagPost;
+
     protected $feedService;
 
     public function __construct(TrendingHashTags $trendingHashTags, TrendingMembers $trendingMembers, HashTagPost $hashTagPost, FeedService $feedService)
@@ -36,14 +36,14 @@ class ExploreController extends Controller
 
             $user = $request->user();
 
-            if (!$user) {
+            if (! $user) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'User Unauthenticated'
+                    'message' => 'User Unauthenticated',
                 ], 401);
             }
 
-            $trending =  $this->trendingHashTags->getTrending(5);
+            $trending = $this->trendingHashTags->getTrending(5);
             $members = $this->trendingMembers->trending(5);
 
             return response()->json([
@@ -51,7 +51,7 @@ class ExploreController extends Controller
                 'message' => 'Trending Hash Tags & Members - Top 5',
                 'data' => [
                     'hashtags' => $trending,
-                    'members' => $members
+                    'members' => $members,
                 ],
             ], 200);
         } catch (Throwable $e) {
@@ -64,7 +64,7 @@ class ExploreController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Unable to fetch Trending'
+                'message' => 'Unable to fetch Trending',
             ], 500);
         }
     }
@@ -74,10 +74,10 @@ class ExploreController extends Controller
         try {
             $user = $request->user();
 
-            if (!$user) {
+            if (! $user) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'User Unauthenticated'
+                    'message' => 'User Unauthenticated',
                 ], 401);
             }
 
@@ -86,7 +86,7 @@ class ExploreController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Trending Hash Tags',
-                'data' => $allTrendingHashTags
+                'data' => $allTrendingHashTags,
             ], 200);
         } catch (Throwable $e) {
 
@@ -98,18 +98,16 @@ class ExploreController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Unable to fetch user profile at this time'
+                'message' => 'Unable to fetch user profile at this time',
             ], 500);
         }
     }
-
-
 
     public function getHastagPost(Request $request)
     {
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             return response()->json([
                 'success' => false,
                 'message' => 'User Unauthenticated',
@@ -118,7 +116,7 @@ class ExploreController extends Controller
 
         $tag = $request->query('hashtag');
 
-        if (!$tag) {
+        if (! $tag) {
             return response()->json([
                 'success' => false,
                 'message' => 'Hashtag query parameter is required',
@@ -126,7 +124,7 @@ class ExploreController extends Controller
         }
 
         try {
-            $posts = $this->feedService->getHashtagPosts($tag, $user->id, 8);//hashTagPost->getHashtagPosts($tag, 8);
+            $posts = $this->feedService->getHashtagPosts($tag, $user->id, 8); // hashTagPost->getHashtagPosts($tag, 8);
 
             return response()->json([
                 'success' => true,
@@ -155,17 +153,15 @@ class ExploreController extends Controller
         }
     }
 
-
-
     public function trendingMembers(Request $request)
     {
         try {
             $user = $request->user();
 
-            if (!$user) {
+            if (! $user) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'User Unauthenticated'
+                    'message' => 'User Unauthenticated',
                 ], 401);
             }
 
@@ -174,7 +170,7 @@ class ExploreController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Trending Members',
-                'data' => $trendingmembers
+                'data' => $trendingmembers,
             ], 200);
         } catch (Throwable $e) {
 
@@ -186,10 +182,8 @@ class ExploreController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Unable to fetch user profile at this time'
+                'message' => 'Unable to fetch user profile at this time',
             ], 500);
         }
     }
-
-
 }

@@ -10,12 +10,12 @@ class LoginPoint extends Model
 {
     use HasFactory, UuidTrait;
 
-    protected $table = "login_points";
+    protected $table = 'login_points';
 
     protected $fillable = ['user_id', 'date', 'point', 'is_redeemed'];
 
-    public function user(){
+    public function user()
+    {
         return $this->belongsTo(User::class);
     }
-
 }

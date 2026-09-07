@@ -11,6 +11,4 @@ class HashtagTrend extends Model
     use HasFactory, UuidTrait;
 
     protected $fillable = ['hashtag_id', 'score', 'time'];
-
-
 }

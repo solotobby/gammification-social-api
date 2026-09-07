@@ -12,11 +12,13 @@ class Withdrawals extends Model
 
     protected $fillable = ['user_id', 'withdrawal_method_id', 'amount', 'naira', 'currency', 'wallet_type', 'method', 'status'];
 
-    public function user(){
+    public function user()
+    {
         return $this->belongsTo(User::class);
     }
 
-    public function withdrawalMethod(){
+    public function withdrawalMethod()
+    {
         return $this->belongsTo(WithdrawalMethod::class, 'withdrawal_method_id');
     }
 }

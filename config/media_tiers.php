@@ -5,24 +5,24 @@ return [
     'tiers' => [
         'Creator' => [
             'images' => ['allowed' => true, 'max' => 1],
-            'video'  => ['allowed' => false, 'max_seconds' => 0],
+            'video' => ['allowed' => false, 'max_seconds' => 0],
         ],
         'Influencer' => [
             'images' => ['allowed' => true, 'max' => 4],
-            'video'  => ['allowed' => true, 'max_seconds' => 60],
+            'video' => ['allowed' => true, 'max_seconds' => 60],
         ],
         'default' => [
             'images' => ['allowed' => false, 'max' => 0],
-            'video'  => ['allowed' => false, 'max_seconds' => 0],
+            'video' => ['allowed' => false, 'max_seconds' => 0],
         ],
     ],
 
     'image' => [
         'max_upload_kb' => 8192,
         'variants' => [
-            'thumb'  => ['width' => 320,  'quality' => 70],
+            'thumb' => ['width' => 320,  'quality' => 70],
             'medium' => ['width' => 960,  'quality' => 75],
-            'full'   => ['width' => 1600, 'quality' => 80],
+            'full' => ['width' => 1600, 'quality' => 80],
         ],
         'format' => 'webp',
     ],

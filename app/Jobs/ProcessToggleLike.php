@@ -18,6 +18,7 @@ class ProcessToggleLike implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 2;
+
     public int $backoff = 5;
 
     public function __construct(
@@ -44,7 +45,7 @@ class ProcessToggleLike implements ShouldQueue
 
     public function handle(LikeService $likeService): void
     {
-        
+
         try {
             $likeService->toggle($this->postUnicode, $this->user);
         } catch (Throwable $e) {

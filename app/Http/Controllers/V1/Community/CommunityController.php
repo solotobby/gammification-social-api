@@ -5,6 +5,7 @@ namespace App\Http\Controllers\V1\Community;
 use App\Http\Controllers\Controller;
 use App\Models\CommunityCategory;
 use App\Services\CommunityService;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -355,5 +356,328 @@ class CommunityController extends Controller
                 'message' => 'Unable to create community at this time',
             ], 500);
         }
+    }
+
+    /**
+     * PUT/PATCH /v1/communities/{id} — update community settings (owner only).
+     */
+    public function update(Request $request, string $id)
+    {
+        $user = resolveApiUser($request);
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        $validated = $request->validate([
+            'name' => ['sometimes', 'string', 'max:255'],
+            'description' => ['sometimes', 'string', 'max:1000'],
+            'community_categories_id' => ['sometimes', 'uuid', 'exists:community_categories,id'],
+            'type' => ['sometimes', Rule::in(['public', 'private', 'paid', 'approval'])],
+            'monthly_fee' => ['sometimes', 'nullable', 'numeric'],
+            'fee_payer' => ['sometimes', 'nullable', Rule::in(['creator', 'members'])],
+            'billing_type' => ['sometimes', 'nullable', Rule::in(['one_off', 'subscription'])],
+            'billing_interval' => [
+                'sometimes',
+                'nullable',
+                Rule::in(array_keys(config('community.billing_intervals', []))),
+            ],
+            'logo' => ['sometimes', 'nullable', 'image', 'max:4096'],
+            'banner' => ['sometimes', 'nullable', 'image', 'max:6144'],
+        ]);
+
+        try {
+            $logo = $request->file('logo');
+            $banner = $request->file('banner');
+
+            $data = $this->communityService->update($user, $id, $validated, $logo, $banner);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Community settings updated',
+                'data' => $data,
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'message' => 'Community not found'], 404);
+        } catch (AuthorizationException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 403);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            Log::error('Failed to update community', [
+                'user_id' => $user->id,
+                'community_id' => $id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json(['success' => false, 'message' => 'Unable to update community'], 500);
+        }
+    }
+
+    /**
+     * DELETE /v1/communities/{id} — delete a community (owner only).
+     */
+    public function destroy(Request $request, string $id)
+    {
+        $user = resolveApiUser($request);
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        try {
+            $result = $this->communityService->delete($user, $id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Community deleted successfully',
+                'data' => $result,
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'message' => 'Community not found'], 404);
+        } catch (AuthorizationException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 403);
+        } catch (Throwable $e) {
+            Log::error('Failed to delete community', [
+                'user_id' => $user->id,
+                'community_id' => $id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json(['success' => false, 'message' => 'Unable to delete community'], 500);
+        }
+    }
+
+    /**
+     * POST /v1/communities/{id}/archive — archive a community (owner only).
+     */
+    public function archive(Request $request, string $id)
+    {
+        $user = resolveApiUser($request);
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        try {
+            $data = $this->communityService->archive($user, $id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Community archived successfully',
+                'data' => $data,
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'message' => 'Community not found'], 404);
+        } catch (AuthorizationException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 403);
+        } catch (Throwable $e) {
+            Log::error('Failed to archive community', [
+                'user_id' => $user->id,
+                'community_id' => $id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json(['success' => false, 'message' => 'Unable to archive community'], 500);
+        }
+    }
+
+    /**
+     * POST /v1/communities/{id}/unarchive — restore an archived community (owner only).
+     */
+    public function unarchive(Request $request, string $id)
+    {
+        $user = resolveApiUser($request);
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        try {
+            $data = $this->communityService->unarchive($user, $id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Community unarchived successfully',
+                'data' => $data,
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'message' => 'Community not found'], 404);
+        } catch (AuthorizationException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 403);
+        } catch (Throwable $e) {
+            Log::error('Failed to unarchive community', [
+                'user_id' => $user->id,
+                'community_id' => $id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json(['success' => false, 'message' => 'Unable to unarchive community'], 500);
+        }
+    }
+
+    /**
+     * POST /v1/communities/{id}/logo — upload or update logo.
+     */
+    public function updateLogo(Request $request, string $id)
+    {
+        $user = resolveApiUser($request);
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        $request->validate([
+            'logo' => ['required', 'image', 'max:4096'],
+        ]);
+
+        try {
+            $data = $this->communityService->updateLogo($user, $id, $request->file('logo'));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Community logo updated',
+                'data' => $data,
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'message' => 'Community not found'], 404);
+        } catch (AuthorizationException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 403);
+        } catch (Throwable $e) {
+            Log::error('Failed to update community logo', [
+                'user_id' => $user->id,
+                'community_id' => $id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json(['success' => false, 'message' => 'Unable to update logo'], 500);
+        }
+    }
+
+    /**
+     * DELETE /v1/communities/{id}/logo — remove community logo.
+     */
+    public function removeLogo(Request $request, string $id)
+    {
+        $user = resolveApiUser($request);
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        try {
+            $data = $this->communityService->removeLogo($user, $id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Community logo removed',
+                'data' => $data,
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'message' => 'Community not found'], 404);
+        } catch (AuthorizationException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 403);
+        } catch (Throwable $e) {
+            Log::error('Failed to remove community logo', [
+                'user_id' => $user->id,
+                'community_id' => $id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json(['success' => false, 'message' => 'Unable to remove logo'], 500);
+        }
+    }
+
+    /**
+     * POST /v1/communities/{id}/banner — upload or update banner.
+     */
+    public function updateBanner(Request $request, string $id)
+    {
+        $user = resolveApiUser($request);
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        $request->validate([
+            'banner' => ['required', 'image', 'max:6144'],
+        ]);
+
+        try {
+            $data = $this->communityService->updateBanner($user, $id, $request->file('banner'));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Community banner updated',
+                'data' => $data,
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'message' => 'Community not found'], 404);
+        } catch (AuthorizationException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 403);
+        } catch (Throwable $e) {
+            Log::error('Failed to update community banner', [
+                'user_id' => $user->id,
+                'community_id' => $id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json(['success' => false, 'message' => 'Unable to update banner'], 500);
+        }
+    }
+
+    /**
+     * DELETE /v1/communities/{id}/banner — remove community banner.
+     */
+    public function removeBanner(Request $request, string $id)
+    {
+        $user = resolveApiUser($request);
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        try {
+            $data = $this->communityService->removeBanner($user, $id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Community banner removed',
+                'data' => $data,
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'message' => 'Community not found'], 404);
+        } catch (AuthorizationException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 403);
+        } catch (Throwable $e) {
+            Log::error('Failed to remove community banner', [
+                'user_id' => $user->id,
+                'community_id' => $id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json(['success' => false, 'message' => 'Unable to remove banner'], 500);
+        }
+    }
+
+    /**
+     * POST /v1/communities/fee-preview — preview fee calculation for paid community.
+     */
+    public function feePreview(Request $request)
+    {
+        if (! resolveApiUser($request)) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        $validated = $request->validate([
+            'monthly_fee' => ['required', 'numeric', 'min:0'],
+            'fee_payer' => ['sometimes', 'nullable', Rule::in(['creator', 'members'])],
+            'billing_type' => ['sometimes', 'nullable', Rule::in(['one_off', 'subscription'])],
+            'billing_interval' => [
+                'sometimes',
+                'nullable',
+                Rule::in(array_keys(config('community.billing_intervals', []))),
+            ],
+        ]);
+
+        $preview = $this->communityService->feePreview($validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Fee preview',
+            'data' => $preview,
+        ]);
     }
 }

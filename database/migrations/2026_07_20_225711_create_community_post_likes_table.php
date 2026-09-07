@@ -16,7 +16,7 @@ return new class extends Migration
             $table->foreignUuid('community_post_id')->constrained('community_posts')->cascadeOnDelete();
             $table->foreignUuid('user_id')->constrained('users')->cascadeOnDelete();
             $table->timestamps();
- 
+
             $table->unique(['community_post_id', 'user_id']);
         });
     }

@@ -12,8 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-             $table->bigInteger('profile_views')->after('phone')->default(0);
-             $table->bigInteger('profile_views_external')->after('phone')->default(0);
+            $table->bigInteger('profile_views')->after('phone')->default(0);
+            $table->bigInteger('profile_views_external')->after('phone')->default(0);
         });
     }
 

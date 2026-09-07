@@ -1,6 +1,9 @@
 <?php
+
 namespace App\Traits;
+
 use Illuminate\Support\Str;
+
 trait UuidTrait
 {
     /**
@@ -15,6 +18,7 @@ trait UuidTrait
             $model->id = Str::uuid()->toString();
         });
     }
+
     /**
      * Get the value indicating whether the IDs are incrementing.
      *
@@ -24,6 +28,7 @@ trait UuidTrait
     {
         return false;
     }
+
     /**
      * Get the primary key for the model.
      *
@@ -33,6 +38,7 @@ trait UuidTrait
     {
         return 'id';
     }
+
     /**
      * Get the auto-incrementing key type.
      *

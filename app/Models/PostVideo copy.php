@@ -82,7 +82,7 @@ class PostVideo extends Model
         if ($this->quality_versions && isset($this->quality_versions[$quality])) {
             return $this->quality_versions[$quality];
         }
-        
+
         return $this->path; // Fallback to original
     }
 
@@ -102,6 +102,7 @@ class PostVideo extends Model
         ];
 
         $quality = $qualityMap[$networkStrength] ?? 'medium';
+
         return $this->getQualityUrl($quality);
     }
 
@@ -157,7 +158,7 @@ class PostVideo extends Model
      */
     public function getFormattedDurationAttribute()
     {
-        if (!$this->duration) {
+        if (! $this->duration) {
             return '0:00';
         }
 
@@ -172,7 +173,7 @@ class PostVideo extends Model
      */
     public function getFormattedFileSizeAttribute()
     {
-        if (!$this->file_size) {
+        if (! $this->file_size) {
             return '0 MB';
         }
 
@@ -185,7 +186,7 @@ class PostVideo extends Model
             $unitIndex++;
         }
 
-        return round($size, 2) . ' ' . $units[$unitIndex];
+        return round($size, 2).' '.$units[$unitIndex];
     }
 
     public function getAdaptiveUrlAttribute(): string

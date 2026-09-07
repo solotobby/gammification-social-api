@@ -18,7 +18,7 @@ return new class extends Migration
             $table->string('ip');
             $table->string('city');
             $table->boolean('is_paid')->default(false);
-          
+
             $table->timestamps();
         });
     }

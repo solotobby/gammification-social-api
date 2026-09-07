@@ -23,7 +23,7 @@ class Post extends Model
         'status',
         'unicode',
         'has_video',
-        'has_images'
+        'has_images',
     ];
 
     public function user()
@@ -63,7 +63,6 @@ class Post extends Model
         return $this->belongsToMany(User::class, 'user_likes', 'post_id');
     }
 
-
     public function views()
     {
 
@@ -94,8 +93,6 @@ class Post extends Model
     {
         return $this->hasMany(UserComment::class);
     }
-
-
 
     public function unpaidComments()
     {
@@ -131,7 +128,6 @@ class Post extends Model
     {
         return $this->externalViews()->where('is_paid', true)->count();
     }
-
 
     public function scopeVisibleToViewer($query, User $profileOwner, ?User $viewer)
     {

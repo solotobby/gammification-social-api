@@ -14,10 +14,10 @@ return new class extends Migration
         Schema::create('hashtag_trends', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('hashtag_id');
- 
+
             $table->unsignedInteger('score')
                 ->default(0);
-            
+
             $table->string('time')->nullable();
 
             $table->timestamps();

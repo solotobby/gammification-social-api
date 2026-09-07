@@ -10,33 +10,33 @@ use App\Jobs\ProcessToggleLike;
 use App\Jobs\ProcessView;
 use App\Models\Comment;
 use App\Models\Post;
-
-use App\Services\HashTagServices;
-use App\Services\UserServices;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
-use Throwable;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
-// use App\Jobs\ProcessPostImage;
-// use App\Jobs\ProcessPostVideo;
 use App\Models\PostImages;
 use App\Models\PostVideo;
 use App\Services\FeedService;
+use App\Services\HashTagServices;
 use App\Services\PostUpdateService;
+use App\Services\UserServices;
 use App\Services\VideoUploadService;
 use App\Support\StoredMedia;
+// use App\Jobs\ProcessPostImage;
+// use App\Jobs\ProcessPostVideo;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Throwable;
 
 class FeedController extends Controller
 {
-
     protected UserServices $userServices;
-    protected HashTagServices $hashtagservices;
-    protected FeedService $feedService;
-    protected PostUpdateService $postUpdateService;
 
+    protected HashTagServices $hashtagservices;
+
+    protected FeedService $feedService;
+
+    protected PostUpdateService $postUpdateService;
 
     public function __construct(
         UserServices $userServices,
@@ -49,7 +49,6 @@ class FeedController extends Controller
         $this->feedService = $feedService;
         $this->postUpdateService = $postUpdateService;
     }
-
 
     // public function feed()
     // {
@@ -103,8 +102,6 @@ class FeedController extends Controller
     //             return $post;
     //         });
 
-
-
     //         return response()->json([
     //             'success' => true,
     //             'message' => 'Feeds',
@@ -123,9 +120,6 @@ class FeedController extends Controller
     //         ], 500);
     //     }
     // }
-
-
-
 
     public function feed(Request $request)
     {
@@ -154,13 +148,11 @@ class FeedController extends Controller
         }
     }
 
-
-
     public function createPost(Request $request, UserServices $userServices, HashTagServices $hashtagservices)
     {
         try {
             $user = $request->user();
-            if (!$user) {
+            if (! $user) {
                 return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
             }
 
@@ -173,24 +165,24 @@ class FeedController extends Controller
                 'video' => ['nullable', 'file'],
             ];
 
-            if (!in_array($level, ['Creator', 'Influencer'])) {
+            if (! in_array($level, ['Creator', 'Influencer'])) {
                 $rules['content'][] = 'max:160';
             }
 
             if ($tier['images']['allowed']) {
-                $rules['images'][] = 'max:' . $tier['images']['max'];
+                $rules['images'][] = 'max:'.$tier['images']['max'];
                 $rules['images.*'] = [
                     'image',
                     'mimes:jpg,jpeg,png,webp,heic,avif',
-                    'max:' . (int) config('media.image_max_kb', config('media_tiers.image.max_upload_kb')),
+                    'max:'.(int) config('media.image_max_kb', config('media_tiers.image.max_upload_kb')),
                 ];
             } else {
                 $rules['images'][] = 'prohibited';
             }
 
             if ($tier['video']['allowed']) {
-                $rules['video'][] = 'mimetypes:'.app(\App\Services\VideoUploadService::class)->allowedMimetypes();
-                $rules['video'][] = 'max:' . app(\App\Services\VideoUploadService::class)->maxFileKb($level);
+                $rules['video'][] = 'mimetypes:'.app(VideoUploadService::class)->allowedMimetypes();
+                $rules['video'][] = 'max:'.app(VideoUploadService::class)->maxFileKb($level);
             } else {
                 $rules['video'][] = 'prohibited';
             }
@@ -212,8 +204,6 @@ class FeedController extends Controller
             }
 
             $content = $this->convertUrlsToLinks(strip_tags($validated['content']));
-
-
 
             if (empty(trim($content))) {
                 return response()->json(['success' => false, 'message' => 'Post content cannot be empty'], 422);
@@ -241,7 +231,7 @@ class FeedController extends Controller
                 $post = Post::create([
                     'user_id' => $user->id,
                     'content' => $content,
-                    'unicode' => rand(1000, 9999) . time(),
+                    'unicode' => rand(1000, 9999).time(),
                     'comment_external' => 0,
                     'status' => $status,
                     'media_status' => $hasMedia ? 'processing' : 'ready',
@@ -328,6 +318,7 @@ class FeedController extends Controller
     {
         $pattern = '/\b(?:https?:\/\/|www\.)\S+\b/';
         $replacement = '<a href="$0" target="_blank" rel="noopener noreferrer">$0</a>';
+
         return preg_replace($pattern, $replacement, $text);
     }
 
@@ -352,6 +343,7 @@ class FeedController extends Controller
 
         $text = preg_replace('/[^\w\s]/', '', $text);
         $text = preg_replace('/\s+/', ' ', $text);
+
         return strtolower(trim($text));
     }
 
@@ -363,12 +355,11 @@ class FeedController extends Controller
 
         try {
             $user = $request->user();
-            if (!$user) {
+            if (! $user) {
                 return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
             }
 
             $post = Post::findOrFail($validated['post_id']);
-
 
             ProcessToggleLike::dispatch($post->id, $post->unicode, $user)->afterCommit();
 
@@ -397,16 +388,15 @@ class FeedController extends Controller
             'comment' => ['required', 'string', 'max:500'],
         ]);
 
-
         try {
             $user = $request->user();
-            if (!$user) {
+            if (! $user) {
                 return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
             }
 
             $post = Post::findOrFail($request->input('post_id'));
 
-            if (!$post) {
+            if (! $post) {
                 return response()->json(['success' => false, 'message' => 'Post not found'], 404);
             }
 
@@ -436,7 +426,7 @@ class FeedController extends Controller
     {
         try {
             $user = $request->user();
-            if (!$user) {
+            if (! $user) {
                 return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
             }
 
@@ -490,7 +480,6 @@ class FeedController extends Controller
 
     //         $post->increment('views');
 
-
     //         // ProcessView::dispatch($post, $user)->afterCommit();
 
     //         return response()->json([
@@ -538,19 +527,19 @@ class FeedController extends Controller
             }
 
             if ($tier['images']['allowed']) {
-                $rules['images'][] = 'max:' . $tier['images']['max'];
+                $rules['images'][] = 'max:'.$tier['images']['max'];
                 $rules['images.*'] = [
                     'image',
                     'mimes:jpg,jpeg,png,webp,heic,avif',
-                    'max:' . (int) config('media.image_max_kb', config('media_tiers.image.max_upload_kb')),
+                    'max:'.(int) config('media.image_max_kb', config('media_tiers.image.max_upload_kb')),
                 ];
             } else {
                 $rules['images'][] = 'prohibited';
             }
 
             if ($tier['video']['allowed']) {
-                $rules['video'][] = 'mimetypes:' . app(VideoUploadService::class)->allowedMimetypes();
-                $rules['video'][] = 'max:' . app(VideoUploadService::class)->maxFileKb($level);
+                $rules['video'][] = 'mimetypes:'.app(VideoUploadService::class)->allowedMimetypes();
+                $rules['video'][] = 'max:'.app(VideoUploadService::class)->maxFileKb($level);
             } else {
                 $rules['video'][] = 'prohibited';
             }
@@ -631,7 +620,7 @@ class FeedController extends Controller
                 'success' => false,
                 'message' => $e->getMessage(),
             ], 422);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        } catch (ModelNotFoundException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Post not found',
@@ -655,7 +644,7 @@ class FeedController extends Controller
     {
         try {
             $user = $request->user();
-            if (!$user) {
+            if (! $user) {
                 return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
             }
 
@@ -693,7 +682,7 @@ class FeedController extends Controller
                 'success' => true,
                 'message' => 'Post deleted successfully',
             ], 200);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        } catch (ModelNotFoundException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Post not found',

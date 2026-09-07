@@ -6,19 +6,18 @@ namespace App\Models;
 
 use App\Traits\UuidTrait;
 use Carbon\Carbon;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Testing\Fluent\Concerns\Has;
-use Laravel\Sanctum\HasApiTokens;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
 
 class User extends Authenticatable implements MustVerifyEmail
 {
-    use HasApiTokens, HasFactory, Notifiable, HasRoles, UuidTrait;
+    use HasApiTokens, HasFactory, HasRoles, Notifiable, UuidTrait;
 
     /**
      * The attributes that are mass assignable.
@@ -36,7 +35,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'password',
         'access_code_id',
         'level_id',
-        'status'
+        'status',
     ];
 
     /**
@@ -60,11 +59,13 @@ class User extends Authenticatable implements MustVerifyEmail
         'status' => 'string',
     ];
 
-    public function profile(){
+    public function profile()
+    {
         return $this->hasOne(Profile::class, 'user_id');
     }
 
-    public function withdrawalMethod(){
+    public function withdrawalMethod()
+    {
         return $this->hasOne(WithdrawalMethod::class, 'user_id');
     }
 
@@ -101,10 +102,10 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function activeLevel()
     {
-        
-       return $this->hasOne(UserLevel::class, 'user_id')
-                ->where('status', 'active')
-                ->where('next_payment_date', '>', Carbon::now());
+
+        return $this->hasOne(UserLevel::class, 'user_id')
+            ->where('status', 'active')
+            ->where('next_payment_date', '>', Carbon::now());
     }
 
     public function social()
@@ -134,7 +135,6 @@ class User extends Authenticatable implements MustVerifyEmail
             ]);
     }
 
-
     // public function scopeWithPostStats(Builder $query, $userId)
     // {
     //     return $query->where('id', $userId)
@@ -158,8 +158,6 @@ class User extends Authenticatable implements MustVerifyEmail
     //         }]);
     // }
 
-
-
     public function getTotalLikesAttribute()
     {
         return $this->posts()->sum('likes');
@@ -175,7 +173,7 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->posts()->sum('comments');
     }
 
-    //like methods 
+    // like methods
     public function likes()
     {
         return $this->hasMany(UserLike::class);
@@ -191,8 +189,6 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->likes()->where('post_id', $post->id)->delete();
     }
 
-
-
     public function followingRelation()
     {
         return $this->hasMany(Follow::class, 'follower_id');
@@ -203,8 +199,6 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return $this->hasMany(Follow::class, 'following_id');
     }
-
-
 
     public function following()
     {
@@ -244,7 +238,6 @@ class User extends Authenticatable implements MustVerifyEmail
         )->withTimestamps();
     }
 
-
     // public function isFollowing($userId)
     // {
     //     return $this->followingRelation()->where('following_id', $userId)->exists();
@@ -256,5 +249,4 @@ class User extends Authenticatable implements MustVerifyEmail
             ->where('users.id', $userId)
             ->exists();
     }
-
 }

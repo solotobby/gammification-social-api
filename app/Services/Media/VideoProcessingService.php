@@ -2,9 +2,9 @@
 
 namespace App\Services\Media;
 
+use App\Services\Media\Format\WebMOpus;
 use FFMpeg\Coordinate\Dimension;
 use FFMpeg\Coordinate\TimeCode;
-use App\Services\Media\Format\WebMOpus;
 // use FFMpeg\Format\Video\WebM;
 use FFMpeg\FFMpeg;
 use FFMpeg\FFProbe;
@@ -18,15 +18,16 @@ use RuntimeException;
 class VideoProcessingService
 {
     protected FFMpeg $ffmpeg;
+
     protected FFProbe $ffprobe;
 
     public function __construct()
     {
         $binaries = [
-            'ffmpeg.binaries'  => env('FFMPEG_BINARY', '/usr/bin/ffmpeg'),
+            'ffmpeg.binaries' => env('FFMPEG_BINARY', '/usr/bin/ffmpeg'),
             'ffprobe.binaries' => env('FFPROBE_BINARY', '/usr/bin/ffprobe'),
-            'timeout'          => 300,
-            'ffmpeg.threads'   => 2,
+            'timeout' => 300,
+            'ffmpeg.threads' => 2,
         ];
 
         $this->ffmpeg = FFMpeg::create($binaries);
@@ -42,7 +43,7 @@ class VideoProcessingService
     {
         $stream = $this->ffprobe->streams($localPath)->videos()->first();
 
-        if (!$stream) {
+        if (! $stream) {
             throw new RuntimeException('No video stream found in upload');
         }
 
@@ -62,8 +63,9 @@ class VideoProcessingService
         $renditions = config('media_tiers.video.renditions');
 
         foreach (['sd', 'hd'] as $tier) {
-            if ($tier === 'hd' && !$includeHd) {
+            if ($tier === 'hd' && ! $includeHd) {
                 $result['hd'] = null;
+
                 continue;
             }
 
@@ -77,7 +79,7 @@ class VideoProcessingService
     {
         $second = min(config('media_tiers.video.poster_second'), max($duration - 1, 0));
 
-        $frameLocal = sys_get_temp_dir() . '/' . Str::uuid() . '.jpg';
+        $frameLocal = sys_get_temp_dir().'/'.Str::uuid().'.jpg';
         $this->ffmpeg->open($localPath)
             ->frame(TimeCode::fromSeconds($second))
             ->save($frameLocal);
@@ -88,48 +90,47 @@ class VideoProcessingService
 
         @unlink($frameLocal);
 
-        $path = "payhankey_media/videos/{$userId}/" . Str::uuid() . '-poster.webp';
+        $path = "payhankey_media/videos/{$userId}/".Str::uuid().'-poster.webp';
         Storage::disk('spaces')->put($path, (string) $webp, 'public');
 
-        return config('filesystems.disks.spaces.url') . '/' . $path;
+        return config('filesystems.disks.spaces.url').'/'.$path;
     }
 
+    // remove: use FFMpeg\Format\Video\WebM;
 
-// remove: use FFMpeg\Format\Video\WebM;
+    protected function transcode(string $localPath, string $userId, string $tier, array $spec, int $width, int $height): string
+    {
+        $video = $this->ffmpeg->open($localPath);
+        $hasAudio = $this->ffprobe->streams($localPath)->audios()->count() > 0;
 
-protected function transcode(string $localPath, string $userId, string $tier, array $spec, int $width, int $height): string
-{
-    $video = $this->ffmpeg->open($localPath);
-    $hasAudio = $this->ffprobe->streams($localPath)->audios()->count() > 0;
+        $targetHeight = min($spec['height'], $height);
+        $targetWidth = (int) round($width * ($targetHeight / $height));
+        $targetWidth -= $targetWidth % 2;
 
-    $targetHeight = min($spec['height'], $height);
-    $targetWidth = (int) round($width * ($targetHeight / $height));
-    $targetWidth -= $targetWidth % 2;
+        $video->filters()
+            ->resize(new Dimension($targetWidth, $targetHeight))
+            ->synchronize();
 
-    $video->filters()
-        ->resize(new Dimension($targetWidth, $targetHeight))
-        ->synchronize();
+        $format = new WebMOpus;
+        $format->setVideoCodec(config('media_tiers.video.codec')); // libvpx-vp9
 
-    $format = new WebMOpus();
-    $format->setVideoCodec(config('media_tiers.video.codec')); // libvpx-vp9
+        if ($hasAudio) {
+            $format->setAudioCodec('libopus');
+            $format->setAudioKiloBitrate($spec['audio_kbps']);
+        } else {
+            $format->setAudioCodec('none');
+        }
 
-    if ($hasAudio) {
-        $format->setAudioCodec('libopus');
-        $format->setAudioKiloBitrate($spec['audio_kbps']);
-    } else {
-        $format->setAudioCodec('none');
+        $format->setKiloBitrate($spec['video_kbps']);
+        $format->setAdditionalParameters(['-deadline', 'good', '-cpu-used', '2', '-row-mt', '1']);
+
+        $outLocal = sys_get_temp_dir().'/'.Str::uuid()."-{$tier}.webm";
+        $video->save($format, $outLocal);
+
+        $remotePath = "payhankey_media/videos/{$userId}/".Str::uuid()."-{$tier}.webm";
+        Storage::disk('spaces')->put($remotePath, file_get_contents($outLocal), 'public');
+        @unlink($outLocal);
+
+        return config('filesystems.disks.spaces.url').'/'.$remotePath;
     }
-
-    $format->setKiloBitrate($spec['video_kbps']);
-    $format->setAdditionalParameters(['-deadline', 'good', '-cpu-used', '2', '-row-mt', '1']);
-
-    $outLocal = sys_get_temp_dir() . '/' . Str::uuid() . "-{$tier}.webm";
-    $video->save($format, $outLocal);
-
-    $remotePath = "payhankey_media/videos/{$userId}/" . Str::uuid() . "-{$tier}.webm";
-    Storage::disk('spaces')->put($remotePath, file_get_contents($outLocal), 'public');
-    @unlink($outLocal);
-
-    return config('filesystems.disks.spaces.url') . '/' . $remotePath;
-}
 }

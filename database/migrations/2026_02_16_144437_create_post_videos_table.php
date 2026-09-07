@@ -36,9 +36,7 @@ return new class extends Migration
             // Analytics
             $table->integer('view_count')->default(0);
             $table->integer('play_count')->default(0);
-            $table->decimal('avg_watch_time', 5, 2)->nullable(); // 
-
-
+            $table->decimal('avg_watch_time', 5, 2)->nullable(); //
 
             $table->timestamps();
             $table->softDeletes();

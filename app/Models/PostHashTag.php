@@ -13,5 +13,4 @@ class PostHashTag extends Model
     protected $table = 'post_hashtag';
 
     protected $fillable = ['post_id', 'hashtag_id'];
-    
 }

@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('user_comments', function (Blueprint $table) {
-             $table->enum('type', ['comment', 'self-comment'])->default('comment')->after('poster_user_id');
+            $table->enum('type', ['comment', 'self-comment'])->default('comment')->after('poster_user_id');
         });
     }
 

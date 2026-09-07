@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('posts', function (Blueprint $table) {
-             $table->string('media_status')->default('ready')->after('status');
+            $table->string('media_status')->default('ready')->after('status');
         });
     }
 

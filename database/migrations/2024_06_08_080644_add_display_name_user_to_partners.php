@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::table('partners', function (Blueprint $table) {
             $table->uuid('user_id')->after('id')->nullable();
-           
+
         });
     }
 

@@ -11,6 +11,4 @@ class UserActivity extends Model
     use HasFactory, UuidTrait;
 
     protected $fillable = ['user_id', 'event'];
-
-    
 }

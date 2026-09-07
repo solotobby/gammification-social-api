@@ -18,7 +18,9 @@ class ProcessPostImage implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
+
     public int $backoff = 15;
+
     public int $timeout = 120;
 
     public function __construct(
@@ -35,6 +37,7 @@ class ProcessPostImage implements ShouldQueue
 
         if (! $record) {
             @unlink($this->localPath);
+
             return;
         }
 

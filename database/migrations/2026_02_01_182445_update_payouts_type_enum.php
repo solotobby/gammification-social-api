@@ -1,8 +1,6 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -11,12 +9,20 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         // Update enum column to include new types
         DB::statement("ALTER TABLE payouts MODIFY COLUMN type ENUM('Freemium','Premium','Bonus','Past') DEFAULT 'Premium' NOT NULL");
     }
 
     public function down(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         // Revert back to original enum
         DB::statement("ALTER TABLE payouts MODIFY COLUMN type ENUM('Freemium','Premium') DEFAULT 'Premium' NOT NULL");
     }

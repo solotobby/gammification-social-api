@@ -9,5 +9,5 @@ class ApiResponse extends Model
 {
     use HasFactory;
 
-    protected  $fillable = ['response'];
+    protected $fillable = ['response'];
 }

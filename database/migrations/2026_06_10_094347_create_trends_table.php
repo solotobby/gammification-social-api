@@ -12,11 +12,11 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('trends', function (Blueprint $table) {
-           $table->uuid('id')->primary();
+            $table->uuid('id')->primary();
             $table->string('name');
             $table->text('description')->nullable();
             $table->string('status')->default('active');
-           $table->timestamps();
+            $table->timestamps();
         });
     }
 

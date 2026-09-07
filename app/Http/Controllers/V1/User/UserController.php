@@ -12,16 +12,17 @@ use App\Models\Wallet;
 use App\Services\FeedService;
 use App\Services\FollowService;
 use App\Services\UserServices;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class UserController extends Controller
 {
     protected $userservices;
+
     protected $followservice;
+
     protected $feedservice;
 
     public function __construct(UserServices $userservices, FollowService $followservice, FeedService $feedservice)
@@ -37,10 +38,10 @@ class UserController extends Controller
 
             $user = $request->user();
 
-            if (!$user) {
+            if (! $user) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Unauthenticated user'
+                    'message' => 'Unauthenticated user',
                 ], 401);
             }
 
@@ -86,7 +87,7 @@ class UserController extends Controller
         }
 
         $validated = $request->validate([
-            'date_of_birth' => ['sometimes', 'nullable', 'date', 'before_or_equal:' . now()->subYears(13)->toDateString()],
+            'date_of_birth' => ['sometimes', 'nullable', 'date', 'before_or_equal:'.now()->subYears(13)->toDateString()],
             'gender' => ['sometimes', 'nullable', 'in:male,female'],
             'location' => ['sometimes', 'nullable', 'string', 'max:50'],
             'about' => ['sometimes', 'nullable', 'string', 'max:160'],
@@ -140,12 +141,11 @@ class UserController extends Controller
             'currency' => ['required', 'string'],
         ]);
 
-
         try {
 
             $user = $request->user();
 
-            if (!$user) {
+            if (! $user) {
                 return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
             }
 
@@ -161,7 +161,7 @@ class UserController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'User Onboarded successfully'
+                'message' => 'User Onboarded successfully',
             ], 201);
         } catch (Throwable $e) {
 
@@ -173,7 +173,7 @@ class UserController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Unable to fetch user profile at this time'
+                'message' => 'Unable to fetch user profile at this time',
             ], 500);
         }
     }
@@ -184,7 +184,7 @@ class UserController extends Controller
 
             $user = $request->user();
 
-            if (!$user) {
+            if (! $user) {
                 return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
             }
 
@@ -223,7 +223,7 @@ class UserController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Unable to fetch user profile at this time'
+                'message' => 'Unable to fetch user profile at this time',
             ], 500);
         }
     }
@@ -234,7 +234,7 @@ class UserController extends Controller
 
             $user = $request->user();
 
-            if (!$user) {
+            if (! $user) {
                 return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
             }
 
@@ -243,7 +243,7 @@ class UserController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Currency List',
-                'data' => $currency
+                'data' => $currency,
             ], 200);
         } catch (Throwable $e) {
 
@@ -255,7 +255,7 @@ class UserController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Unable to fetch currency at this time'
+                'message' => 'Unable to fetch currency at this time',
             ], 500);
         }
     }
@@ -266,7 +266,7 @@ class UserController extends Controller
 
             $user = $request->user();
 
-            if (!$user) {
+            if (! $user) {
                 return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
             }
 
@@ -281,7 +281,7 @@ class UserController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'How you heard list',
-                'data' => $list
+                'data' => $list,
             ], 200);
         } catch (Throwable $e) {
 
@@ -293,7 +293,7 @@ class UserController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Unable to fetch how you heard at this time'
+                'message' => 'Unable to fetch how you heard at this time',
             ], 500);
         }
     }
@@ -306,14 +306,16 @@ class UserController extends Controller
 
         try {
             $users = $this->userservices->search($request->query('q'), 10);
+
             return response()->json(['success' => true, 'data' => $users]);
         } catch (Throwable $e) {
             Log::error('User search failed', ['term' => $request->query('q'), 'message' => $e->getMessage()]);
+
             return response()->json(['success' => false, 'message' => 'Search failed'], 500);
         }
     }
 
-     public function toggle(Request $request)
+    public function toggle(Request $request)
     {
         $authUser = $request->user();
 
@@ -367,9 +369,5 @@ class UserController extends Controller
             ], 500);
         }
 
-
     }
-
-
-
 }

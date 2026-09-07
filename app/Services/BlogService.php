@@ -22,7 +22,7 @@ class BlogService
         }
 
         if (! empty($filters['q'])) {
-            $term = '%' . addcslashes(trim($filters['q']), '%_\\') . '%';
+            $term = '%'.addcslashes(trim($filters['q']), '%_\\').'%';
             $query->where(function (Builder $q) use ($term) {
                 $q->where('title', 'like', $term)
                     ->orWhere('excerpt', 'like', $term);

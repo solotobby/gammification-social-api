@@ -4,6 +4,7 @@ namespace App\Http\Controllers\V1\Community;
 
 use App\Http\Controllers\Controller;
 use App\Services\CommunityPostService;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -25,6 +26,7 @@ class CommunityPostController extends Controller
         }
 
         $validated = $request->validate([
+            'search' => ['sometimes', 'nullable', 'string', 'max:100'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:50'],
         ]);
 
@@ -33,6 +35,7 @@ class CommunityPostController extends Controller
                 $user,
                 $id,
                 (int) ($validated['per_page'] ?? CommunityPostService::POSTS_PER_PAGE),
+                $validated['search'] ?? null,
             );
 
             return response()->json([
@@ -273,6 +276,75 @@ class CommunityPostController extends Controller
                 'success' => false,
                 'message' => 'Unable to create post',
             ], 500);
+        }
+    }
+
+    /**
+     * DELETE /v1/communities/{id}/posts/{postId} — delete a post (author, admin, or owner).
+     */
+    public function destroy(Request $request, string $id, string $postId)
+    {
+        $user = resolveApiUser($request);
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        try {
+            $result = $this->communityPostService->deletePost($user, $id, $postId);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Post deleted successfully',
+                'data' => $result,
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'message' => 'Post not found'], 404);
+        } catch (AuthorizationException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 403);
+        } catch (Throwable $e) {
+            Log::error('Failed to delete community post', [
+                'user_id' => $user->id,
+                'community_id' => $id,
+                'post_id' => $postId,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json(['success' => false, 'message' => 'Unable to delete post'], 500);
+        }
+    }
+
+    /**
+     * DELETE /v1/communities/{id}/posts/{postId}/comments/{commentId} — delete a comment.
+     */
+    public function destroyComment(Request $request, string $id, string $postId, string $commentId)
+    {
+        $user = resolveApiUser($request);
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        try {
+            $result = $this->communityPostService->deleteComment($user, $id, $postId, $commentId);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Comment deleted successfully',
+                'data' => $result,
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'message' => 'Comment not found'], 404);
+        } catch (AuthorizationException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 403);
+        } catch (Throwable $e) {
+            Log::error('Failed to delete community comment', [
+                'user_id' => $user->id,
+                'community_id' => $id,
+                'post_id' => $postId,
+                'comment_id' => $commentId,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json(['success' => false, 'message' => 'Unable to delete comment'], 500);
         }
     }
 }

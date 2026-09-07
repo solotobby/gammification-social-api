@@ -17,11 +17,13 @@ class EngagementMonthlyStat extends Model
         return $this->belongsTo(User::class, 'user_id');
     }
 
-    public function withdrawalMethod(){
+    public function withdrawalMethod()
+    {
         return $this->belongsTo(WithdrawalMethod::class, 'user_id', 'user_id');
     }
 
-    public function wallet(){
+    public function wallet()
+    {
         return $this->belongsTo(Wallet::class, 'user_id');
     }
 }

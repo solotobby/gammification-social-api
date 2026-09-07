@@ -4,14 +4,11 @@ namespace App\Services;
 
 use App\Models\Hashtag;
 use App\Models\Post;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 
 class HashTagPost
 {
-
     protected function latestCommentsPerPost($q)
     {
         $q->with('user:id,username,name')
@@ -27,7 +24,6 @@ class HashTagPost
             ->latest();
     }
 
-
     public function getHashtagPosts(string $tag, int $perPage = 10): LengthAwarePaginator
     {
         $hashtag = Hashtag::select('id')
@@ -41,19 +37,18 @@ class HashTagPost
             })
             ->where('status', 'LIVE')
             ->with(['user:id,username,name'])
-            ->with(['video' => fn($q) => $q->where('processing_status', 'completed')
+            ->with(['video' => fn ($q) => $q->where('processing_status', 'completed')
                 ->select(['id', 'post_id', 'path', 'hd_path', 'thumbnail_path', 'duration', 'width', 'height'])])
-            ->with(['images' => fn($q) => $q->where('processing_status', 'completed')
+            ->with(['images' => fn ($q) => $q->where('processing_status', 'completed')
                 ->select(['id', 'post_id', 'path', 'thumbnail_path', 'medium_path', 'full_path', 'width', 'height'])])
-            ->with(['postComments' => fn($q) => $this->latestCommentsPerPost($q)])
+            ->with(['postComments' => fn ($q) => $this->latestCommentsPerPost($q)])
             ->latest('created_at')
             ->paginate($perPage);
 
-        $posts->getCollection()->transform(fn(Post $post) => $this->transformPost($post));
+        $posts->getCollection()->transform(fn (Post $post) => $this->transformPost($post));
 
         return $posts;
     }
-
 
     protected function transformPost(Post $post): Post
     {
@@ -73,7 +68,7 @@ class HashTagPost
             } elseif ($post->has_images && $post->images->isNotEmpty()) {
                 $post->media = [
                     'type' => 'images',
-                    'items' => $post->images->map(fn($img) => [
+                    'items' => $post->images->map(fn ($img) => [
                         'thumb_url' => $img->thumbnail_path,
                         'medium_url' => $img->medium_path ?: $img->path,
                         'full_url' => $img->full_path,
@@ -84,7 +79,7 @@ class HashTagPost
             }
         }
 
-        $post->comments_preview = $post->postComments->map(fn($c) => [
+        $post->comments_preview = $post->postComments->map(fn ($c) => [
             'id' => $c->id,
             'user' => $c->user?->only(['id', 'username', 'name']),
             'message' => $c->message,

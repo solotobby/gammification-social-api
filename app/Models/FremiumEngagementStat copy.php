@@ -11,7 +11,7 @@ class FremiumEngagementStat extends Model
     use HasFactory, UuidTrait;
 
     protected $table = 'fremium_engagement_stats';
-    
+
     protected $fillable = [
         'user_id',
         'level',

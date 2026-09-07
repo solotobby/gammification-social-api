@@ -2,26 +2,21 @@
 
 namespace App\Services;
 
-use App\Models\UserLevel;
-
 use App\Models\User;
+use App\Models\UserLevel;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
+class UserServices
+{
+    public function activeLevel($user) // fetches a user active level
+    {$level = UserLevel::where('user_id', $user->id)->where('status', 'active')->first();
 
-class UserServices{
-
-    public function activeLevel($user){ //fetches a user active level
-       $level = UserLevel::where('user_id', $user->id)->where('status', 'active')->first();
-
-       return $level?->plan_name;
+        return $level?->plan_name;
     }
 
+    private const SEARCH_COLUMNS = ['id', 'name', 'username', 'avatar', 'followers', 'following'];
 
-     private const SEARCH_COLUMNS = ['id', 'name', 'username', 'avatar', 'followers', 'following'];
-
-
-
-      public function search(string $term, int $perPage = 10): LengthAwarePaginator
+    public function search(string $term, int $perPage = 10): LengthAwarePaginator
     {
         $term = trim($term);
 
@@ -35,7 +30,4 @@ class UserServices{
             ->orderBy('name')
             ->paginate($perPage);
     }
-
-
-
 }

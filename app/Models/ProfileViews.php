@@ -11,6 +11,4 @@ class ProfileViews extends Model
     use HasFactory, UuidTrait;
 
     protected $fillable = ['user_id', 'viewer_id'];
-
-    
 }
