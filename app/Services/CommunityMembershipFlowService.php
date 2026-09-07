@@ -18,6 +18,7 @@ class CommunityMembershipFlowService
         protected CommunityMembershipService $membershipService,
         protected CommunityInviteService $inviteService,
         protected CommunityService $communityService,
+        protected NotificationService $notificationService,
     ) {}
 
     public function acceptInviteByToken(User $user, string $token): array
@@ -171,7 +172,32 @@ class CommunityMembershipFlowService
             ]);
         });
 
-        $joinRequest->load('user:id,username,name,avatar');
+        $joinRequest->load('user:id,username,name,avatar,email');
+        $requester = $joinRequest->user;
+
+        if ($requester) {
+            $url = $this->notificationService->communityUrl($community->slug);
+
+            $this->notificationService->send(
+                $requester,
+                [
+                    'title' => "Your request to join {$community->name} was approved",
+                    'message' => "You are now a member of \"{$community->name}\".",
+                    'icon' => 'check-circle',
+                    'url' => $url,
+                    'type' => 'community_join_approved',
+                    'meta' => [
+                        'community_id' => $community->id,
+                        'community_slug' => $community->slug,
+                    ],
+                ],
+                true,
+                "You're in! Approved for {$community->name}",
+                "<p>Good news — your request to join \"{$community->name}\" has been approved.</p>"
+                    ."<p>You can visit the community now.</p>"
+                    ."<p><a class=\"btn\" href=\"{$url}\">Open community</a></p>",
+            );
+        }
 
         return [
             'action' => 'approved',
@@ -205,7 +231,34 @@ class CommunityMembershipFlowService
             'reviewed_at' => now(),
         ]);
 
-        $joinRequest->load('user:id,username,name,avatar');
+        $joinRequest->load('user:id,username,name,avatar,email');
+        $requester = $joinRequest->user;
+
+        if ($requester) {
+            $url = $this->notificationService->communityUrl($community->slug);
+            $reasonNote = $reason !== '' ? "<p>Reason: ".e($reason).'</p>' : '';
+
+            $this->notificationService->send(
+                $requester,
+                [
+                    'title' => "Your request to join {$community->name} was declined",
+                    'message' => $reason !== ''
+                        ? "Your request to join \"{$community->name}\" was declined. Reason: {$reason}"
+                        : "Your request to join \"{$community->name}\" was declined.",
+                    'icon' => 'x-circle',
+                    'url' => $url,
+                    'type' => 'community_join_denied',
+                    'meta' => [
+                        'community_id' => $community->id,
+                        'community_slug' => $community->slug,
+                        'reason' => $reason !== '' ? $reason : null,
+                    ],
+                ],
+                true,
+                "Join request declined for {$community->name}",
+                "<p>Your request to join \"{$community->name}\" was declined.</p>{$reasonNote}",
+            );
+        }
 
         return [
             'action' => 'denied',
@@ -270,6 +323,31 @@ class CommunityMembershipFlowService
         }
 
         $invite = $this->inviteService->createDirectInvite($community, $user, $invitee);
+
+        $inviterName = displayName($user->name);
+        $acceptUrl = $this->notificationService->inviteAcceptUrl($invite->token);
+
+        $this->notificationService->send(
+            $invitee,
+            [
+                'title' => "{$inviterName} invited you to {$community->name}",
+                'message' => "You have been invited to join the private community \"{$community->name}\".",
+                'icon' => 'envelope',
+                'url' => $acceptUrl,
+                'type' => 'community_invite',
+                'meta' => [
+                    'community_id' => $community->id,
+                    'community_slug' => $community->slug,
+                    'invite_token' => $invite->token,
+                    'inviter_id' => $user->id,
+                ],
+            ],
+            true,
+            "Invitation to join {$community->name}",
+            "<p><strong>{$inviterName}</strong> invited you to join the private community \"{$community->name}\".</p>"
+                ."<p>Click the button below to accept.</p>"
+                ."<p><a class=\"btn\" href=\"{$acceptUrl}\">Accept invite</a></p>",
+        );
 
         return [
             'action' => 'invited',
@@ -399,6 +477,26 @@ class CommunityMembershipFlowService
 
         $community->members()->updateExistingPivot($targetUserId, ['role' => 'admin']);
 
+        $target = User::query()->find($targetUserId);
+        if ($target) {
+            $url = $this->notificationService->communityUrl($community->slug);
+            $this->notificationService->send(
+                $target,
+                [
+                    'title' => "You're now an admin of {$community->name}",
+                    'message' => "You have been promoted to admin in \"{$community->name}\".",
+                    'icon' => 'shield',
+                    'url' => $url,
+                    'type' => 'community_promoted',
+                    'meta' => ['community_id' => $community->id, 'community_slug' => $community->slug],
+                ],
+                true,
+                "You're now an admin of {$community->name}",
+                "<p>You have been promoted to admin in \"{$community->name}\".</p>"
+                    ."<p><a class=\"btn\" href=\"{$url}\">Open community</a></p>",
+            );
+        }
+
         return ['action' => 'promoted', 'role' => 'admin', 'user_id' => $targetUserId];
     }
 
@@ -417,6 +515,25 @@ class CommunityMembershipFlowService
         }
 
         $community->members()->updateExistingPivot($targetUserId, ['role' => 'member']);
+
+        $target = User::query()->find($targetUserId);
+        if ($target) {
+            $url = $this->notificationService->communityUrl($community->slug);
+            $this->notificationService->send(
+                $target,
+                [
+                    'title' => "Admin role removed in {$community->name}",
+                    'message' => "Your admin role in \"{$community->name}\" has been changed to member.",
+                    'icon' => 'user',
+                    'url' => $url,
+                    'type' => 'community_demoted',
+                    'meta' => ['community_id' => $community->id, 'community_slug' => $community->slug],
+                ],
+                true,
+                "Admin role updated in {$community->name}",
+                "<p>Your admin role in \"{$community->name}\" has been changed to member.</p>",
+            );
+        }
 
         return ['action' => 'demoted', 'role' => 'member', 'user_id' => $targetUserId];
     }
@@ -437,6 +554,24 @@ class CommunityMembershipFlowService
 
         $community->members()->updateExistingPivot($targetUserId, ['status' => 'banned']);
 
+        $target = User::query()->find($targetUserId);
+        if ($target) {
+            $this->notificationService->send(
+                $target,
+                [
+                    'title' => "Removed from {$community->name}",
+                    'message' => "You have been banned from \"{$community->name}\".",
+                    'icon' => 'ban',
+                    'url' => null,
+                    'type' => 'community_banned',
+                    'meta' => ['community_id' => $community->id, 'community_slug' => $community->slug],
+                ],
+                true,
+                "You were banned from {$community->name}",
+                "<p>You have been banned from the community \"{$community->name}\".</p>",
+            );
+        }
+
         return ['action' => 'banned', 'user_id' => $targetUserId];
     }
 
@@ -452,6 +587,26 @@ class CommunityMembershipFlowService
 
         $community->bannedMembers()->updateExistingPivot($targetUserId, ['status' => 'active']);
 
+        $target = User::query()->find($targetUserId);
+        if ($target) {
+            $url = $this->notificationService->communityUrl($community->slug);
+            $this->notificationService->send(
+                $target,
+                [
+                    'title' => "Welcome back to {$community->name}",
+                    'message' => "Your ban from \"{$community->name}\" has been lifted.",
+                    'icon' => 'check-circle',
+                    'url' => $url,
+                    'type' => 'community_unbanned',
+                    'meta' => ['community_id' => $community->id, 'community_slug' => $community->slug],
+                ],
+                true,
+                "Ban lifted for {$community->name}",
+                "<p>Your ban from \"{$community->name}\" has been lifted. You can rejoin community activity.</p>"
+                    ."<p><a class=\"btn\" href=\"{$url}\">Open community</a></p>",
+            );
+        }
+
         return ['action' => 'unbanned', 'user_id' => $targetUserId];
     }
 
@@ -465,6 +620,24 @@ class CommunityMembershipFlowService
         }
 
         $community->members()->detach($targetUserId);
+
+        $target = User::query()->find($targetUserId);
+        if ($target) {
+            $this->notificationService->send(
+                $target,
+                [
+                    'title' => "Removed from {$community->name}",
+                    'message' => "You have been removed from \"{$community->name}\".",
+                    'icon' => 'user-minus',
+                    'url' => null,
+                    'type' => 'community_removed',
+                    'meta' => ['community_id' => $community->id, 'community_slug' => $community->slug],
+                ],
+                true,
+                "Removed from {$community->name}",
+                "<p>You have been removed from the community \"{$community->name}\".</p>",
+            );
+        }
 
         return ['action' => 'removed', 'user_id' => $targetUserId];
     }

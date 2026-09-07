@@ -56,6 +56,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Frontend URL
+    |--------------------------------------------------------------------------
+    |
+    | Used for deep links inside email and in-app notifications (community
+    | pages, invite accept links, wallet, etc.).
+    |
+    */
+
+    'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost')),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

@@ -23,6 +23,7 @@ use App\Http\Controllers\V1\User\SocialController;
 use App\Http\Controllers\V1\User\TransactionController;
 use App\Http\Controllers\V1\User\UserController;
 use App\Http\Controllers\V1\User\WalletController;
+use App\Http\Controllers\V1\Notification\NotificationController;
 use App\Http\Controllers\V1\Webhook\PaymentWebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -108,6 +109,15 @@ Route::prefix('v1')->group(function () {
             Route::get('/transactions', [TransactionController::class, 'index']);
             Route::get('/referrals', [ReferralController::class, 'index']);
             Route::get('/wallet', [WalletController::class, 'show']);
+        });
+
+        Route::prefix('notifications')->group(function () {
+            Route::get('/', [NotificationController::class, 'index']);
+            Route::get('/unread-count', [NotificationController::class, 'unreadCount']);
+            Route::post('/read-all', [NotificationController::class, 'markAllAsRead']);
+            Route::delete('/', [NotificationController::class, 'destroyAll']);
+            Route::post('/{id}/read', [NotificationController::class, 'markAsRead']);
+            Route::delete('/{id}', [NotificationController::class, 'destroy']);
         });
 
         Route::prefix('explore')->group(function () {

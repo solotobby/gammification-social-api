@@ -24,6 +24,7 @@ class CommunityService
     public function __construct(
         protected CommunityInviteService $communityInviteService,
         protected CommunityMembershipService $communityMembershipService,
+        protected NotificationService $notificationService,
     ) {}
 
     /**
@@ -510,6 +511,29 @@ class CommunityService
             throw new InvalidArgumentException('Unable to join this community.');
         }
 
+        $owner = $community->user ?? $community->user()->first();
+        if ($owner && $owner->id !== $user->id) {
+            $memberName = displayName($user->name);
+            $url = $this->notificationService->communityUrl($community->slug);
+
+            $this->notificationService->send(
+                $owner,
+                [
+                    'title' => "{$memberName} joined {$community->name}",
+                    'message' => "{$memberName} just joined your community \"{$community->name}\".",
+                    'icon' => 'user-plus',
+                    'url' => $url,
+                    'type' => 'community_member_joined',
+                    'meta' => [
+                        'community_id' => $community->id,
+                        'community_slug' => $community->slug,
+                        'member_id' => $user->id,
+                    ],
+                ],
+                false,
+            );
+        }
+
         return 'joined';
     }
 
@@ -560,6 +584,34 @@ class CommunityService
 
         $joinRequest->id = (string) Str::uuid();
         $joinRequest->save();
+
+        $owner = $community->user ?? $community->user()->first();
+        $requesterName = displayName($user->name);
+
+        if ($owner && $owner->id !== $user->id) {
+            $url = $this->notificationService->communityUrl($community->slug);
+
+            $this->notificationService->send(
+                $owner,
+                [
+                    'title' => "{$requesterName} requested to join {$community->name}",
+                    'message' => "{$requesterName} wants to join your community \"{$community->name}\".",
+                    'icon' => 'user-plus',
+                    'url' => $url,
+                    'type' => 'community_join_request',
+                    'meta' => [
+                        'community_id' => $community->id,
+                        'community_slug' => $community->slug,
+                        'requester_id' => $user->id,
+                    ],
+                ],
+                true,
+                "New join request for {$community->name}",
+                "<p><strong>{$requesterName}</strong> has requested to join your community \"{$community->name}\".</p>"
+                    ."<p>Review and respond from the Members tab of your community settings.</p>"
+                    ."<p><a class=\"btn\" href=\"{$url}\">Review request</a></p>",
+            );
+        }
 
         return 'request_sent';
     }

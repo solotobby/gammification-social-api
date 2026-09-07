@@ -20,6 +20,7 @@ class PayKoinService
 {
     public function __construct(
         protected TransactionService $transactionService,
+        protected NotificationService $notificationService,
     ) {}
 
     public function rates(string $currency): array
@@ -552,7 +553,7 @@ class PayKoinService
                 ],
             ]);
 
-            return [
+            $giftPayload = [
                 'gift' => $this->formatGiftForUi($gift->load('sender:id,username')),
                 'spendable' => (int) $senderWallet->paykoin_spendable,
                 'giftTotal' => (int) PostGift::query()
@@ -560,7 +561,53 @@ class PayKoinService
                     ->where('giftable_id', $giftable->id)
                     ->count(),
             ];
+
+            DB::afterCommit(function () use ($sender, $recipient, $artifact, $pkAmount, $gift, $giftable, $giftableType) {
+                $this->notifyGiftReceived($sender, $recipient, $artifact, $pkAmount, $gift, $giftable, $giftableType);
+            });
+
+            return $giftPayload;
         });
+    }
+
+    private function notifyGiftReceived(
+        User $sender,
+        User $recipient,
+        array $artifact,
+        int $pkAmount,
+        PostGift $gift,
+        Model $giftable,
+        string $giftableType,
+    ): void {
+        $senderName = displayName($sender->name);
+        $artifactName = $artifact['name'] ?? 'gift';
+        $emoji = $artifact['emoji'] ?? '🎁';
+        $url = $this->notificationService->giftsUrl();
+
+        $this->notificationService->send(
+            $recipient,
+            [
+                'title' => "{$senderName} sent you a {$artifactName}",
+                'message' => "{$senderName} gifted you {$emoji} {$artifactName} ({$pkAmount} PK) on your post.",
+                'icon' => 'gift',
+                'url' => $url,
+                'type' => 'gift_received',
+                'meta' => [
+                    'gift_id' => $gift->id,
+                    'sender_id' => $sender->id,
+                    'artifact_id' => $artifact['id'] ?? null,
+                    'pk_amount' => $pkAmount,
+                    'giftable_type' => $giftableType,
+                    'giftable_id' => $giftable->id,
+                ],
+            ],
+            true,
+            "{$senderName} sent you a {$artifactName}",
+            "<p><strong>{$senderName}</strong> gifted you {$emoji} <strong>{$artifactName}</strong> "
+                ."({$pkAmount} PayKoin) on your post.</p>"
+                ."<p>The PayKoin has been added to your earned balance.</p>"
+                ."<p><a class=\"btn\" href=\"{$url}\">View wallet</a></p>",
+        );
     }
 
     public function resolveGiftableClass(string $giftableType): string
