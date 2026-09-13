@@ -94,6 +94,7 @@ class CommunitySubscriptionService
             type: 'community_'.$community->billing_type,
             description: 'Payment for community ('.$community->billing_type.'): '.$community->name,
             meta: [
+                'channel' => 'mobile',
                 'community_id' => (string) $community->id,
                 'community_name' => $community->name,
                 'user_id' => (string) $user->id,
@@ -114,12 +115,13 @@ class CommunitySubscriptionService
             'reference' => $reference,
             'narration' => 'Payment for community ('.$community->billing_type.'): '.$community->name,
             'channels' => ['card', 'bank_transfer', 'pay_with_bank'],
-            'notification_url' => url('/v1/webhooks/flutterwave'), // handled in webhooks
+            'notification_url' => config('services.payment.korapay_webhook_url'),
             'customer' => [
                 'name' => $user->name,
                 'email' => $user->email,
             ],
             'metadata' => [
+                'channel' => 'mobile',
                 'community_id' => (string) $community->id,
                 'user_id' => (string) $user->id,
                 'billing_type' => $community->billing_type,
@@ -190,6 +192,7 @@ class CommunitySubscriptionService
             type: 'community_'.$community->billing_type,
             description: 'Payment for community ('.$community->billing_type.'): '.$community->name,
             meta: [
+                'channel' => 'mobile',
                 'community_id' => (string) $community->id,
                 'community_name' => $community->name,
                 'user_id' => (string) $user->id,
@@ -217,6 +220,7 @@ class CommunitySubscriptionService
                 'description' => 'Payment for community membership',
             ],
             'meta' => [
+                'channel' => 'mobile',
                 'community_id' => (string) $community->id,
                 'user_id' => (string) $user->id,
                 'billing_type' => $community->billing_type,

@@ -90,6 +90,7 @@ class PayKoinService
             type: 'paykoin_topup',
             description: 'PayKoin top-up',
             meta: [
+                'channel' => 'mobile',
                 'pk_amount' => $pkAmount,
                 'cash_amount' => $cashAmount,
                 'charge_amount_ngn' => $chargeAmount,
@@ -101,9 +102,10 @@ class PayKoinService
             ? route('verify.paykoin.topup')
             : url('/v1/paykoin/topup/status?reference='.$reference));
 
-        $notification = Route::has('korapay.webhook')
-            ? route('korapay.webhook')
-            : url('/v1/webhooks/korapay');
+        $notification = config('services.payment.korapay_webhook_url')
+            ?: (Route::has('korapay.webhook')
+                ? route('korapay.webhook')
+                : url('/v1/webhooks/korapay'));
 
         $response = Http::withHeaders([
             'Accept' => 'application/json',
@@ -124,6 +126,7 @@ class PayKoinService
             'metadata' => [
                 'user_id' => $user->id,
                 'type' => 'paykoin_topup',
+                'channel' => 'mobile',
                 'pk_amount' => $pkAmount,
             ],
         ]);

@@ -86,6 +86,7 @@ class FlutterwaveUpgradeService
                 type: 'subscription_upgrade',
                 description: "{$user->name} upgrade to {$level->name}",
                 meta: [
+                    'channel' => 'mobile',
                     'level_id' => $level->id,
                     'level_name' => $level->name,
                     'billing_mode' => 'subscription',
@@ -119,6 +120,7 @@ class FlutterwaveUpgradeService
                     'level_id' => $level->id,
                     'user_id' => $user->id,
                     'type' => 'subscription_upgrade',
+                    'channel' => 'mobile',
                 ],
             ];
 

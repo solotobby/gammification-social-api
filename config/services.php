@@ -48,6 +48,7 @@ return [
     'payment' => [
         'korapay_redirect_url' => env('KORAPAY_REDIRECT_URL', env('APP_URL').'/payment/korapay/callback'),
         'flutterwave_redirect_url' => env('FLUTTERWAVE_REDIRECT_URL', env('APP_URL').'/payment/flutterwave/callback'),
+        'korapay_webhook_url' => env('PAYMENT_WEBHOOK_URL_KORAPAY', env('KORAPAY_WEBHOOK_URL', 'https://payhankey.com/korapay/webhook')),
     ],
 
 ];

@@ -168,6 +168,16 @@ class PayKoinAndGiftTest extends TestCase
             'amount' => 1000,
             'status' => 'initiated',
         ]);
+
+        $tx = Transaction::where('user_id', $this->sender->id)->where('type', 'paykoin_topup')->latest()->first();
+        $this->assertNotNull($tx);
+        $this->assertEquals('mobile', $tx->meta['channel'] ?? null);
+
+        Http::assertSent(function (\Illuminate\Http\Client\Request $request) {
+            return $request->url() === 'https://api.korapay.com/merchant/api/v1/charges/initialize'
+                && data_get($request->data(), 'metadata.channel') === 'mobile'
+                && !empty(data_get($request->data(), 'notification_url'));
+        });
     }
 
     public function test_can_credit_paykoin_via_korapay_webhook(): void

@@ -65,6 +65,7 @@ class KorapayUpgradeService
             type: 'subscription_upgrade',
             description: "{$user->name} upgrade to {$level->name}",
             meta: [
+                'channel' => 'mobile',
                 'level_id' => $level->id,
                 'level_name' => $level->name,
                 'billing_mode' => $billingMode,
@@ -74,6 +75,7 @@ class KorapayUpgradeService
         $payload = [
             'amount' => $amountNgn,
             'redirect_url' => config('services.payment.korapay_redirect_url'),
+            'notification_url' => config('services.payment.korapay_webhook_url'),
             'currency' => 'NGN',
             'reference' => $reference,
             'narration' => "{$level->name} upgrade",
@@ -85,6 +87,7 @@ class KorapayUpgradeService
             'metadata' => [
                 'user_id' => $user->id,
                 'level_id' => $level->id,
+                'channel' => 'mobile',
                 'billing_mode' => $billingMode,
             ],
         ];
