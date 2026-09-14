@@ -60,6 +60,15 @@ Route::prefix('v1')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])
         ->middleware('throttle:20,1');
 
+    Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])
+        ->middleware('throttle:5,1');
+
+    Route::post('/verify/forgot-password-otp', [AuthController::class, 'verifyForgotPasswordOTP'])
+        ->middleware('throttle:10,1');
+
+    Route::post('/reset-password', [AuthController::class, 'resetPassword'])
+        ->middleware('throttle:5,1');
+
     Route::post('/webhooks/flutterwave', [PaymentWebhookController::class, 'flutterwave'])->name('flutterwave.webhook');
     Route::post('/webhooks/korapay', [PaymentWebhookController::class, 'korapay'])->name('korapay.webhook');
    
@@ -96,6 +105,10 @@ Route::prefix('v1')->group(function () {
             Route::get('/levels', [LevelController::class, 'index']);
             Route::post('/levels/{levelId}/checkout', [LevelController::class, 'checkout'])->whereUuid('levelId');
             Route::match(['put', 'patch', 'post'], '/profile', [UserController::class, 'updateProfile']);
+            Route::post('/avatar', [UserController::class, 'updateAvatar']);
+            Route::delete('/avatar', [UserController::class, 'removeAvatar']);
+            Route::post('/banner', [UserController::class, 'updateBanner']);
+            Route::delete('/banner', [UserController::class, 'removeBanner']);
             Route::get('/socials', [SocialController::class, 'show']);
             Route::match(['put', 'patch', 'post'], '/socials', [SocialController::class, 'update']);
             Route::post('/onboard', [UserController::class, 'onboardUser']);
@@ -110,6 +123,8 @@ Route::prefix('v1')->group(function () {
             Route::get('/transactions', [TransactionController::class, 'index']);
             Route::get('/referrals', [ReferralController::class, 'index']);
             Route::get('/wallet', [WalletController::class, 'show']);
+            Route::post('/change-password', [AuthController::class, 'changePassword'])
+                ->middleware('throttle:10,1');
         });
 
         Route::prefix('notifications')->group(function () {

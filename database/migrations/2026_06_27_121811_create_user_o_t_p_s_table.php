@@ -18,6 +18,8 @@ return new class extends Migration
 
             $table->string('otp');
 
+            $table->string('type')->default('verification')->index();
+
             $table->timestamp('expires_at');
 
             $table->boolean('is_used')->default(false);

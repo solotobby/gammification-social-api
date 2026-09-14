@@ -34,6 +34,7 @@ class User extends Authenticatable
         'phone',
         'email',
         'avatar',
+        'banner',
         'referral_code',
         'password',
         'access_code_id',

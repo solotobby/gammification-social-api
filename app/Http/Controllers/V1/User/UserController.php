@@ -12,9 +12,12 @@ use App\Models\Wallet;
 use App\Services\FeedService;
 use App\Services\FollowService;
 use App\Services\UserServices;
+use App\Support\StoredMedia;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Throwable;
 
 class UserController extends Controller
@@ -91,11 +94,39 @@ class UserController extends Controller
             'gender' => ['sometimes', 'nullable', 'in:male,female'],
             'location' => ['sometimes', 'nullable', 'string', 'max:50'],
             'about' => ['sometimes', 'nullable', 'string', 'max:160'],
+            'avatar' => ['sometimes', 'nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'banner' => ['sometimes', 'nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
         ], [
             'date_of_birth.before_or_equal' => 'You must be at least 13 years old to use Payhankey.',
         ]);
 
         try {
+            $userUpdated = false;
+
+            if ($request->hasFile('avatar')) {
+                StoredMedia::delete($user->avatar, 'spaces');
+                $user->avatar = $this->storeUserMedia($request->file('avatar'), 'avatar', $user);
+                $userUpdated = true;
+            } elseif ($request->boolean('remove_avatar')) {
+                StoredMedia::delete($user->avatar, 'spaces');
+                $user->avatar = null;
+                $userUpdated = true;
+            }
+
+            if ($request->hasFile('banner')) {
+                StoredMedia::delete($user->banner, 'spaces');
+                $user->banner = $this->storeUserMedia($request->file('banner'), 'banner', $user);
+                $userUpdated = true;
+            } elseif ($request->boolean('remove_banner')) {
+                StoredMedia::delete($user->banner, 'spaces');
+                $user->banner = null;
+                $userUpdated = true;
+            }
+
+            if ($userUpdated) {
+                $user->save();
+            }
+
             $payload = [];
             foreach (['date_of_birth', 'gender', 'location', 'about'] as $field) {
                 if (! array_key_exists($field, $validated)) {
@@ -106,12 +137,13 @@ class UserController extends Controller
                 $payload[$field] = is_string($value) && trim($value) === '' ? null : $value;
             }
 
-            $profile = Profile::updateOrCreate(
-                ['user_id' => $user->id],
-                $payload
-            );
-
-            $user->setRelation('profile', $profile);
+            if (! empty($payload) || ! $user->relationLoaded('profile')) {
+                $profile = Profile::updateOrCreate(
+                    ['user_id' => $user->id],
+                    $payload
+                );
+                $user->setRelation('profile', $profile);
+            }
 
             return response()->json([
                 'success' => true,
@@ -131,6 +163,178 @@ class UserController extends Controller
                 'message' => 'Unable to update profile at this time',
             ], 500);
         }
+    }
+
+    public function updateAvatar(Request $request)
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        $request->validate([
+            'avatar' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+        ]);
+
+        try {
+            StoredMedia::delete($user->avatar, 'spaces');
+            $user->avatar = $this->storeUserMedia($request->file('avatar'), 'avatar', $user);
+            $user->save();
+            $user->load('profile');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Avatar updated successfully',
+                'data' => [
+                    'avatar' => $user->avatar,
+                    'user' => new UserResource($user),
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Failed to update avatar', [
+                'user_id' => $user->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to update avatar at this time',
+            ], 500);
+        }
+    }
+
+    public function removeAvatar(Request $request)
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        try {
+            if ($user->avatar) {
+                StoredMedia::delete($user->avatar, 'spaces');
+                $user->avatar = null;
+                $user->save();
+            }
+            $user->load('profile');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Avatar removed successfully',
+                'data' => [
+                    'avatar' => null,
+                    'user' => new UserResource($user),
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Failed to remove avatar', [
+                'user_id' => $user->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to remove avatar at this time',
+            ], 500);
+        }
+    }
+
+    public function updateBanner(Request $request)
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        $request->validate([
+            'banner' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
+        ]);
+
+        try {
+            StoredMedia::delete($user->banner, 'spaces');
+            $user->banner = $this->storeUserMedia($request->file('banner'), 'banner', $user);
+            $user->save();
+            $user->load('profile');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Banner updated successfully',
+                'data' => [
+                    'banner' => $user->banner,
+                    'user' => new UserResource($user),
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Failed to update banner', [
+                'user_id' => $user->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to update banner at this time',
+            ], 500);
+        }
+    }
+
+    public function removeBanner(Request $request)
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        try {
+            if ($user->banner) {
+                StoredMedia::delete($user->banner, 'spaces');
+                $user->banner = null;
+                $user->save();
+            }
+            $user->load('profile');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Banner removed successfully',
+                'data' => [
+                    'banner' => null,
+                    'user' => new UserResource($user),
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Failed to remove banner', [
+                'user_id' => $user->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to remove banner at this time',
+            ], 500);
+        }
+    }
+
+    protected function storeUserMedia($file, string $prefix, User $user): string
+    {
+        $extension = $file->getClientOriginalExtension() ?: 'jpg';
+        $filename = $prefix.'-'.Str::uuid().'-'.$user->id.'.'.$extension;
+
+        $path = Storage::disk('spaces')->putFileAs(
+            'payhankey_media/profiles',
+            $file,
+            $filename,
+            'public',
+        );
+
+        $baseUrl = rtrim((string) config('filesystems.disks.spaces.url'), '/');
+        if ($baseUrl !== '') {
+            return $baseUrl.'/'.ltrim($path, '/');
+        }
+
+        return Storage::disk('spaces')->url($path);
     }
 
     public function onboardUser(Request $request)
@@ -188,7 +392,7 @@ class UserController extends Controller
                 return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
             }
 
-            $profile = User::with('profile')->where('username', $username)->select(['id', 'avatar', 'name', 'username', 'followers', 'following', 'status'])->first();
+            $profile = User::with('profile')->where('username', $username)->select(['id', 'avatar', 'banner', 'name', 'username', 'followers', 'following', 'status'])->first();
 
             if (! $profile) {
                 return response()->json([

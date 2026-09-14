@@ -9,7 +9,7 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class SendUserOTP extends Mailable
+class SendPasswordResetOTP extends Mailable
 {
     use Queueable, SerializesModels;
 
@@ -24,7 +24,7 @@ class SendUserOTP extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Payhankey - Email Verification Code',
+            subject: 'Payhankey - Password Reset Code',
         );
     }
 
@@ -34,7 +34,7 @@ class SendUserOTP extends Mailable
     public function content(): Content
     {
         return new Content(
-            view: 'otp',
+            view: 'emails.password-reset-otp',
             with: [
                 'otp' => $this->otp,
                 'name' => $this->name,

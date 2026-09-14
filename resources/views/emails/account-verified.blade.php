@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Payhankey - Email Verification Code</title>
+    <title>Payhankey - Account Verified</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -33,25 +33,23 @@
             padding: 24px 0;
             line-height: 1.6;
         }
-        .otp-box {
+        .success-box {
             background-color: #f0fdf4;
-            border: 2px dashed #1FAE64;
+            border: 1px solid #bbf7d0;
             border-radius: 8px;
-            padding: 16px 24px;
+            padding: 16px 20px;
             text-align: center;
             margin: 20px 0;
         }
-        .otp-code {
-            font-size: 34px;
+        .badge {
+            display: inline-block;
+            background-color: #1FAE64;
+            color: white;
+            font-size: 14px;
             font-weight: bold;
-            letter-spacing: 8px;
-            color: #1FAE64;
-            margin: 0;
-        }
-        .notice {
-            font-size: 13px;
-            color: #6c757d;
-            margin-top: 14px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            margin-bottom: 8px;
         }
         .footer {
             text-align: center;
@@ -68,20 +66,20 @@
             <strong>Payhankey</strong>
         </div>
         <div class="content">
-            <h3>Verify Your Email Address</h3>
-            <p>Dear {{ $name ?? 'Member' }},</p>
-            <p>Thank you for signing up on Payhankey! Please use the 6-digit verification code below to complete your registration:</p>
+            <h3>Your Account is Verified! ✅</h3>
+            <p>Dear {{ $user->name }},</p>
+            <p>Congratulations! Your email address (<strong>{{ $user->email }}</strong>) has been successfully verified.</p>
 
-            <div class="otp-box">
-                <div class="otp-code">{{ $otp }}</div>
+            <div class="success-box">
+                <div class="badge">Verified Member</div>
+                <p style="margin: 4px 0 0 0; color: #166534; font-weight: 500;">
+                    Your account is now fully active.
+                </p>
             </div>
 
-            <p class="notice">
-                ⏰ This code expires in <strong>30 minutes</strong>.<br>
-                🔒 For security, never share this code with anyone. Payhankey staff will never ask for your verification code.
-            </p>
+            <p>You can now log in, set up your profile, create posts, participate in discussions, join paid & free communities, and explore creator monetisation.</p>
 
-            <p>Best regards,<br><i>The Payhankey Team</i></p>
+            <p>Thank you for choosing Payhankey!<br><i>The Payhankey Team</i></p>
         </div>
         <div class="footer">
             &copy; {{ date('Y') }} Payhankey. All rights reserved.

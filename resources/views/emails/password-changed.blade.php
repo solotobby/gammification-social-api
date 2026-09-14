@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Payhankey - Email Verification Code</title>
+    <title>Payhankey - Security Alert: Password Changed</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -33,25 +33,14 @@
             padding: 24px 0;
             line-height: 1.6;
         }
-        .otp-box {
-            background-color: #f0fdf4;
-            border: 2px dashed #1FAE64;
-            border-radius: 8px;
-            padding: 16px 24px;
-            text-align: center;
+        .alert-box {
+            background-color: #fef2f2;
+            border-left: 4px solid #ef4444;
+            padding: 14px 18px;
+            border-radius: 4px;
             margin: 20px 0;
-        }
-        .otp-code {
-            font-size: 34px;
-            font-weight: bold;
-            letter-spacing: 8px;
-            color: #1FAE64;
-            margin: 0;
-        }
-        .notice {
-            font-size: 13px;
-            color: #6c757d;
-            margin-top: 14px;
+            font-size: 14px;
+            color: #991b1b;
         }
         .footer {
             text-align: center;
@@ -68,20 +57,18 @@
             <strong>Payhankey</strong>
         </div>
         <div class="content">
-            <h3>Verify Your Email Address</h3>
-            <p>Dear {{ $name ?? 'Member' }},</p>
-            <p>Thank you for signing up on Payhankey! Please use the 6-digit verification code below to complete your registration:</p>
+            <h3>Security Alert: Password Updated 🔒</h3>
+            <p>Dear {{ $user->name }},</p>
+            <p>This email confirms that the password for your Payhankey account (<strong>{{ $user->email }}</strong>) was changed on <strong>{{ now()->toFormattedDateString() }} at {{ now()->format('H:i T') }}</strong>.</p>
 
-            <div class="otp-box">
-                <div class="otp-code">{{ $otp }}</div>
+            <div class="alert-box">
+                <strong>Didn't make this change?</strong><br>
+                If you did not initiate this password change, your account may have been compromised. Please contact Payhankey support immediately to secure your account.
             </div>
 
-            <p class="notice">
-                ⏰ This code expires in <strong>30 minutes</strong>.<br>
-                🔒 For security, never share this code with anyone. Payhankey staff will never ask for your verification code.
-            </p>
+            <p>If you made this change yourself, no further action is required.</p>
 
-            <p>Best regards,<br><i>The Payhankey Team</i></p>
+            <p>Stay safe,<br><i>The Payhankey Security Team</i></p>
         </div>
         <div class="footer">
             &copy; {{ date('Y') }} Payhankey. All rights reserved.

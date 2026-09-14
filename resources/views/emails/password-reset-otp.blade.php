@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Payhankey - Email Verification Code</title>
+    <title>Payhankey - Password Reset Code</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -34,8 +34,8 @@
             line-height: 1.6;
         }
         .otp-box {
-            background-color: #f0fdf4;
-            border: 2px dashed #1FAE64;
+            background-color: #fef2f2;
+            border: 2px dashed #ef4444;
             border-radius: 8px;
             padding: 16px 24px;
             text-align: center;
@@ -45,13 +45,22 @@
             font-size: 34px;
             font-weight: bold;
             letter-spacing: 8px;
-            color: #1FAE64;
+            color: #dc2626;
             margin: 0;
         }
         .notice {
             font-size: 13px;
             color: #6c757d;
             margin-top: 14px;
+        }
+        .security-alert {
+            background-color: #fffbeb;
+            border-left: 4px solid #f59e0b;
+            padding: 12px 16px;
+            margin-top: 20px;
+            font-size: 13px;
+            color: #92400e;
+            border-radius: 4px;
         }
         .footer {
             text-align: center;
@@ -68,20 +77,23 @@
             <strong>Payhankey</strong>
         </div>
         <div class="content">
-            <h3>Verify Your Email Address</h3>
+            <h3>Password Reset Request</h3>
             <p>Dear {{ $name ?? 'Member' }},</p>
-            <p>Thank you for signing up on Payhankey! Please use the 6-digit verification code below to complete your registration:</p>
+            <p>We received a request to reset the password for your Payhankey account. Enter the 6-digit verification code below to proceed:</p>
 
             <div class="otp-box">
                 <div class="otp-code">{{ $otp }}</div>
             </div>
 
             <p class="notice">
-                ⏰ This code expires in <strong>30 minutes</strong>.<br>
-                🔒 For security, never share this code with anyone. Payhankey staff will never ask for your verification code.
+                ⏰ This code will expire in <strong>15 minutes</strong>.
             </p>
 
-            <p>Best regards,<br><i>The Payhankey Team</i></p>
+            <div class="security-alert">
+                <strong>Didn't request this?</strong> If you did not request a password reset, you can safely ignore this email. Your password will remain unchanged.
+            </div>
+
+            <p style="margin-top: 24px;">Best regards,<br><i>The Payhankey Team</i></p>
         </div>
         <div class="footer">
             &copy; {{ date('Y') }} Payhankey. All rights reserved.

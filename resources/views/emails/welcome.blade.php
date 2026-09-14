@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Payhankey - Email Verification Code</title>
+    <title>Welcome to Payhankey!</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -33,25 +33,19 @@
             padding: 24px 0;
             line-height: 1.6;
         }
-        .otp-box {
+        .highlight-box {
             background-color: #f0fdf4;
-            border: 2px dashed #1FAE64;
-            border-radius: 8px;
-            padding: 16px 24px;
-            text-align: center;
+            border-left: 4px solid #1FAE64;
+            padding: 16px 20px;
+            border-radius: 4px;
             margin: 20px 0;
         }
-        .otp-code {
-            font-size: 34px;
-            font-weight: bold;
-            letter-spacing: 8px;
-            color: #1FAE64;
-            margin: 0;
+        .highlight-box ul {
+            margin: 8px 0 0 0;
+            padding-left: 20px;
         }
-        .notice {
-            font-size: 13px;
-            color: #6c757d;
-            margin-top: 14px;
+        .highlight-box li {
+            margin-bottom: 6px;
         }
         .footer {
             text-align: center;
@@ -68,20 +62,22 @@
             <strong>Payhankey</strong>
         </div>
         <div class="content">
-            <h3>Verify Your Email Address</h3>
-            <p>Dear {{ $name ?? 'Member' }},</p>
-            <p>Thank you for signing up on Payhankey! Please use the 6-digit verification code below to complete your registration:</p>
+            <h3>Welcome to Payhankey, {{ $user->name }}! 🎉</h3>
+            <p>Your email address has been successfully verified, and your account (<strong>@{{ $user->username }}</strong>) is now fully active.</p>
 
-            <div class="otp-box">
-                <div class="otp-code">{{ $otp }}</div>
+            <div class="highlight-box">
+                <strong>What you can do on Payhankey:</strong>
+                <ul>
+                    <li>🚀 <strong>Share & Create:</strong> Post updates, videos, and images with the community.</li>
+                    <li>💰 <strong>Earn & Monetize:</strong> Earn PayKoin and rewards for quality posts and engagement.</li>
+                    <li>👥 <strong>Join Communities:</strong> Connect with like-minded creators and exclusive groups.</li>
+                    <li>🎁 <strong>Send & Receive Gifts:</strong> Support fellow creators with interactive post gifts.</li>
+                </ul>
             </div>
 
-            <p class="notice">
-                ⏰ This code expires in <strong>30 minutes</strong>.<br>
-                🔒 For security, never share this code with anyone. Payhankey staff will never ask for your verification code.
-            </p>
+            <p>You can now log in, explore the feed, and start connecting with fellow members.</p>
 
-            <p>Best regards,<br><i>The Payhankey Team</i></p>
+            <p>Welcome aboard!<br><i>The Payhankey Team</i></p>
         </div>
         <div class="footer">
             &copy; {{ date('Y') }} Payhankey. All rights reserved.

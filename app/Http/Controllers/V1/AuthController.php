@@ -3,7 +3,11 @@
 namespace App\Http\Controllers\V1;
 
 use App\Http\Controllers\Controller;
+use App\Mail\AccountVerifiedMail;
+use App\Mail\PasswordChangedMail;
+use App\Mail\SendPasswordResetOTP;
 use App\Mail\SendUserOTP;
+use App\Mail\WelcomeAccountMail;
 use App\Models\AccessCode;
 use App\Models\Level;
 use App\Models\Referral;
@@ -153,13 +157,20 @@ class AuthController extends Controller
 
                 $sendOTP = UserOTP::create([
                     'user_id' => $user->id,
-                    'otp' => $otp,
+                    'otp' => (string) $otp,
+                    'type' => UserOTP::TYPE_VERIFICATION,
                     'expires_at' => now()->addMinutes(30),
                 ]);
 
                 if ($sendOTP) {
-
-                    Mail::to($user->email)->send(new SendUserOTP($otp));
+                    try {
+                        Mail::to($user->email)->send(new SendUserOTP($otp, $user->name));
+                    } catch (Throwable $mailEx) {
+                        Log::warning('Registration email dispatch failed: '.$mailEx->getMessage(), [
+                            'user_id' => $user->id,
+                            'email' => $user->email,
+                        ]);
+                    }
                 }
 
                 return $user;
@@ -225,7 +236,12 @@ class AuthController extends Controller
         ]);
 
         try {
-            $fetch = UserOTP::where('user_id', $validated['id'])->where('otp', $validated['otp'])
+            $fetch = UserOTP::where('user_id', $validated['id'])
+                ->where('otp', $validated['otp'])
+                ->where(function ($q) {
+                    $q->where('type', UserOTP::TYPE_VERIFICATION)
+                        ->orWhereNull('type');
+                })
                 ->where('is_used', false)
                 ->where('expires_at', '>', now())
                 ->lockForUpdate()
@@ -245,9 +261,14 @@ class AuthController extends Controller
             $user->email_verified_at = now();
             $user->save();
 
-            // $user->update([
-            //     'email_verified_at' => now()
-            // ]);
+            try {
+                Mail::to($user->email)->send(new WelcomeAccountMail($user));
+            } catch (Throwable $mailEx) {
+                Log::warning('Welcome verified account email dispatch failed: '.$mailEx->getMessage(), [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                ]);
+            }
 
             $token = $user->createToken('PayhankeyApi')->accessToken;
 
@@ -290,16 +311,23 @@ class AuthController extends Controller
 
             }
 
-            $otp = random_int(100000, 999999);
+            $otp = (string) random_int(100000, 999999);
             $sendOTP = UserOTP::create([
                 'user_id' => $validated['id'],
                 'otp' => $otp,
+                'type' => UserOTP::TYPE_VERIFICATION,
                 'expires_at' => now()->addMinutes(30),
             ]);
 
             if ($sendOTP) {
-
-                Mail::to($user->email)->send(new SendUserOTP($otp));
+                try {
+                    Mail::to($user->email)->send(new SendUserOTP($otp, $user->name));
+                } catch (Throwable $mailEx) {
+                    Log::warning('Resend OTP email dispatch failed: '.$mailEx->getMessage(), [
+                        'user_id' => $user->id,
+                        'email' => $user->email,
+                    ]);
+                }
             }
 
             return response()->json([
@@ -307,7 +335,6 @@ class AuthController extends Controller
                 'message' => 'OTP sent successfully',
                 'data' => [
                     'id' => $user->id,
-                    // 'token' => $token
                 ],
             ]);
         } catch (Throwable $e) {
@@ -429,4 +456,294 @@ class AuthController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Request a 6-digit OTP to reset account password.
+     */
+    public function forgotPassword(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email:rfc,dns', 'max:255'],
+        ]);
+
+        $key = 'forgot-password:'.$request->ip();
+        if (RateLimiter::tooManyAttempts($key, 15)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Too many attempts. Please try again in a few minutes.',
+            ], 429);
+        }
+        RateLimiter::hit($key, 120);
+
+        try {
+            $user = User::query()
+                ->where('email', strtolower(trim($validated['email'])))
+                ->first();
+
+            if (! $user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'We could not find an account associated with this email address.',
+                ], 404);
+            }
+
+            $otp = (string) random_int(100000, 999999);
+
+            // Invalidate any existing unused password_reset OTPs for this user
+            UserOTP::query()
+                ->where('user_id', $user->id)
+                ->where('type', UserOTP::TYPE_PASSWORD_RESET)
+                ->where('is_used', false)
+                ->update(['is_used' => true]);
+
+            $record = UserOTP::create([
+                'user_id' => $user->id,
+                'otp' => $otp,
+                'type' => UserOTP::TYPE_PASSWORD_RESET,
+                'expires_at' => now()->addMinutes(15),
+                'is_used' => false,
+            ]);
+
+            if ($record) {
+                try {
+                    Mail::to($user->email)->send(new SendPasswordResetOTP($otp, $user->name));
+                } catch (Throwable $mailEx) {
+                    Log::error('Password reset OTP email failed', [
+                        'user_id' => $user->id,
+                        'error' => $mailEx->getMessage(),
+                    ]);
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Password reset code sent to your email address.',
+                'data' => [
+                    'email' => $user->email,
+                    'expires_in_minutes' => 15,
+                ],
+            ], 200);
+        } catch (Throwable $e) {
+            Log::error('Forgot password failed', [
+                'email' => $validated['email'],
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to process password reset request at this time.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Optional pre-validation of forgot-password OTP for multi-step mobile UIs.
+     */
+    public function verifyForgotPasswordOTP(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email:rfc,dns', 'max:255'],
+            'otp' => ['required', 'string', 'size:6'],
+        ]);
+
+        try {
+            $user = User::query()
+                ->where('email', strtolower(trim($validated['email'])))
+                ->first();
+
+            if (! $user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Account not found.',
+                ], 404);
+            }
+
+            $otpRecord = UserOTP::query()
+                ->where('user_id', $user->id)
+                ->where('otp', $validated['otp'])
+                ->where('type', UserOTP::TYPE_PASSWORD_RESET)
+                ->where('is_used', false)
+                ->where('expires_at', '>', now())
+                ->first();
+
+            if (! $otpRecord) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid or expired OTP code.',
+                ], 422);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'OTP verified successfully. You can now reset your password.',
+            ], 200);
+        } catch (Throwable $e) {
+            Log::error('Verify password reset OTP failed', [
+                'email' => $validated['email'],
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to verify OTP at this time.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Reset account password using the verified OTP code.
+     */
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email:rfc,dns', 'max:255'],
+            'otp' => ['required', 'string', 'size:6'],
+            'password' => ['required', 'string', 'min:8', 'max:255', 'confirmed'],
+        ]);
+
+        $key = 'reset-password:'.$request->ip();
+        if (RateLimiter::tooManyAttempts($key, 5)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Too many attempts. Please try again later.',
+            ], 429);
+        }
+        RateLimiter::hit($key, 60);
+
+        try {
+            $user = User::query()
+                ->where('email', strtolower(trim($validated['email'])))
+                ->first();
+
+            if (! $user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Account not found.',
+                ], 404);
+            }
+
+            $otpRecord = UserOTP::query()
+                ->where('user_id', $user->id)
+                ->where('otp', $validated['otp'])
+                ->where('type', UserOTP::TYPE_PASSWORD_RESET)
+                ->where('is_used', false)
+                ->where('expires_at', '>', now())
+                ->lockForUpdate()
+                ->first();
+
+            if (! $otpRecord) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid or expired OTP code.',
+                ], 422);
+            }
+
+            // Mark OTP used
+            $otpRecord->is_used = true;
+            $otpRecord->save();
+
+            // Update user password and mark email verified if not previously verified
+            $user->password = Hash::make($validated['password']);
+            if ($user->email_verified_at === null) {
+                $user->email_verified_at = now();
+            }
+            $user->save();
+
+            // Revoke active passport tokens for security
+            if (method_exists($user, 'tokens')) {
+                $user->tokens()->delete();
+            }
+
+            RateLimiter::clear($key);
+
+            // Send confirmation alert email
+            try {
+                Mail::to($user->email)->send(new PasswordChangedMail($user));
+            } catch (Throwable $mailEx) {
+                Log::warning('Password reset confirmation email failed: '.$mailEx->getMessage());
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Password reset successfully. You can now log in with your new password.',
+            ], 200);
+        } catch (Throwable $e) {
+            Log::error('Password reset failed', [
+                'email' => $validated['email'],
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to reset password at this time.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Change password for logged-in authenticated user.
+     */
+    public function changePassword(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthenticated',
+            ], 401);
+        }
+
+        $validated = $request->validate([
+            'current_password' => ['required', 'string'],
+            'password' => ['required', 'string', 'min:8', 'max:255', 'confirmed'],
+        ]);
+
+        if (! Hash::check($validated['current_password'], $user->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The provided current password does not match our records.',
+                'errors' => [
+                    'current_password' => ['The provided current password does not match our records.'],
+                ],
+            ], 422);
+        }
+
+        if (Hash::check($validated['password'], $user->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'New password cannot be the same as your current password.',
+                'errors' => [
+                    'password' => ['New password cannot be the same as your current password.'],
+                ],
+            ], 422);
+        }
+
+        try {
+            $user->password = Hash::make($validated['password']);
+            $user->save();
+
+            try {
+                Mail::to($user->email)->send(new PasswordChangedMail($user));
+            } catch (Throwable $mailEx) {
+                Log::warning('Password change alert email failed: '.$mailEx->getMessage());
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Password changed successfully.',
+            ], 200);
+        } catch (Throwable $e) {
+            Log::error('Change password failed', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to change password at this time.',
+            ], 500);
+        }
+    }
 }
+

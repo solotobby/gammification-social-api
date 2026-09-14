@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Attachment;
@@ -9,13 +10,12 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class SendUserOTP extends Mailable
+class PasswordChangedMail extends Mailable
 {
     use Queueable, SerializesModels;
 
     public function __construct(
-        public string|int $otp,
-        public ?string $name = null,
+        public User $user,
     ) {}
 
     /**
@@ -24,7 +24,7 @@ class SendUserOTP extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Payhankey - Email Verification Code',
+            subject: 'Payhankey - Security Alert: Password Changed',
         );
     }
 
@@ -34,10 +34,9 @@ class SendUserOTP extends Mailable
     public function content(): Content
     {
         return new Content(
-            view: 'otp',
+            view: 'emails.password-changed',
             with: [
-                'otp' => $this->otp,
-                'name' => $this->name,
+                'user' => $this->user,
             ],
         );
     }
