@@ -211,9 +211,19 @@ class NotificationController extends Controller
             'device_name' => ['sometimes', 'nullable', 'string', 'max:100'],
             'ip_address' => ['sometimes', 'nullable', 'ip'],
             'location_type' => ['sometimes', 'nullable', 'string', 'max:64'],
+            'location' => ['sometimes', 'nullable', 'string', 'max:150'],
+            'city' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'country' => ['sometimes', 'nullable', 'string', 'max:100'],
         ]);
 
         $ip = $validated['ip_address'] ?? $request->ip();
+
+        // Support both direct "location": "London, United Kingdom" or "city" + "country"
+        $location = $validated['location'] ?? null;
+        if (! $location && (! empty($validated['city']) || ! empty($validated['country']))) {
+            $parts = array_filter([$validated['city'] ?? null, $validated['country'] ?? null]);
+            $location = implode(', ', $parts);
+        }
 
         $deviceToken = $this->expoPushNotificationService->registerToken(
             $user,
@@ -221,7 +231,8 @@ class NotificationController extends Controller
             $validated['platform'] ?? null,
             $validated['device_name'] ?? null,
             $ip,
-            $validated['location_type'] ?? null
+            $validated['location_type'] ?? null,
+            $location
         );
 
         return response()->json([
@@ -234,6 +245,7 @@ class NotificationController extends Controller
                 'device_name' => $deviceToken->device_name,
                 'ip_address' => $deviceToken->ip_address,
                 'location_type' => $deviceToken->location_type,
+                'location' => $deviceToken->location,
                 'is_logged_out' => $deviceToken->is_logged_out,
                 'is_active' => $deviceToken->is_active,
                 'last_active_at' => $deviceToken->last_active_at?->toIso8601String(),

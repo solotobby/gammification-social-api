@@ -29,6 +29,8 @@ class ExpoPushNotificationTest extends TestCase
             'platform' => 'ios',
             'device_name' => 'iPhone 15 Pro',
             'location_type' => 'cellular',
+            'location' => 'London, United Kingdom',
+            'ip_address' => '102.89.34.112',
         ]);
 
         $response->assertStatus(200)
@@ -40,6 +42,8 @@ class ExpoPushNotificationTest extends TestCase
                     'platform' => 'ios',
                     'device_name' => 'iPhone 15 Pro',
                     'location_type' => 'cellular',
+                    'location' => 'London, United Kingdom',
+                    'ip_address' => '102.89.34.112',
                     'is_logged_out' => false,
                     'is_active' => true,
                 ],
@@ -51,8 +55,34 @@ class ExpoPushNotificationTest extends TestCase
             'platform' => 'ios',
             'device_name' => 'iPhone 15 Pro',
             'location_type' => 'cellular',
+            'location' => 'London, United Kingdom',
+            'ip_address' => '102.89.34.112',
             'is_logged_out' => false,
             'is_active' => true,
+        ]);
+    }
+
+    public function test_user_can_register_location_with_city_and_country(): void
+    {
+        $response = $this->actingAs($this->user, 'api')->postJson('/v1/notifications/device-token', [
+            'token' => 'ExponentPushToken[device-houston-token]',
+            'platform' => 'android',
+            'device_name' => 'Samsung S24',
+            'city' => 'Houston',
+            'country' => 'Texas, US',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'location' => 'Houston, Texas, US',
+                ],
+            ]);
+
+        $this->assertDatabaseHas('user_device_tokens', [
+            'token' => 'ExponentPushToken[device-houston-token]',
+            'location' => 'Houston, Texas, US',
         ]);
     }
 

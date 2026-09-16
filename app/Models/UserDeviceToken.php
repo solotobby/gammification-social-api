@@ -20,6 +20,7 @@ class UserDeviceToken extends Model
         'device_name',
         'ip_address',
         'location_type',
+        'location',
         'is_logged_out',
         'is_active',
         'last_active_at',

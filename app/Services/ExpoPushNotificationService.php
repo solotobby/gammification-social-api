@@ -31,7 +31,8 @@ class ExpoPushNotificationService
         ?string $platform = null,
         ?string $deviceName = null,
         ?string $ipAddress = null,
-        ?string $locationType = null
+        ?string $locationType = null,
+        ?string $location = null
     ): UserDeviceToken {
         return UserDeviceToken::updateOrCreate(
             ['token' => $token],
@@ -41,6 +42,7 @@ class ExpoPushNotificationService
                 'device_name' => $deviceName,
                 'ip_address' => $ipAddress,
                 'location_type' => $locationType,
+                'location' => $location,
                 'is_logged_out' => false,
                 'is_active' => true,
                 'last_active_at' => now(),

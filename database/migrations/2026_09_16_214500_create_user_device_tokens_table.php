@@ -17,6 +17,7 @@ return new class extends Migration
                 $table->string('device_name')->nullable(); // e.g. iPhone 15 Pro, Samsung S24
                 $table->string('ip_address', 45)->nullable(); // IPv4 or IPv6
                 $table->string('location_type', 64)->nullable(); // e.g. cellular, wifi, home, office
+                $table->string('location', 150)->nullable(); // e.g. London, United Kingdom or Houston, Texas
                 $table->boolean('is_logged_out')->default(false);
                 $table->boolean('is_active')->default(true);
                 $table->timestamp('last_active_at')->nullable();
