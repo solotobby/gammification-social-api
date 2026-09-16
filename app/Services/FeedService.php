@@ -234,7 +234,7 @@ class FeedService
             ->with(['images' => fn ($q) => $q->where('processing_status', 'completed')
                 ->select(['id', 'post_id', 'path', 'thumbnail_path', 'medium_path', 'full_path', 'width', 'height'])])
             ->with(['likes' => fn ($q) => $this->latestPerPost($q, self::USER_LIKES_TABLE, self::LIKERS_PREVIEW_LIMIT)])
-            ->with(['activeBoost' => fn ($q) => $q->select(['id', 'post_id', 'cta', 'target_url', 'remaining_clicks', 'status', 'partner_id'])])
+            ->with(['activeBoost' => fn ($q) => $q->select(['id', 'post_id', 'cta', 'target_url', 'remaining_clicks', 'status'])])
             ->when($viewerId, fn ($q) => $q->withExists([
                 'likes as is_liked_by_viewer' => fn ($sub) => $sub->where('user_id', $viewerId),
                 'bookmarks as is_bookmarked' => fn ($sub) => $sub->where('user_id', $viewerId),

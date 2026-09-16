@@ -344,4 +344,38 @@ class PostBoostTest extends TestCase
         $this->post->refresh();
         $this->assertFalse($this->post->is_boosted);
     }
+
+    public function test_timeline_feed_eager_loads_active_boost_without_unknown_column_error(): void
+    {
+        $boost = PostBoost::create([
+            'post_id' => $this->post->id,
+            'user_id' => $this->user->id,
+            'cta' => 'Learn More',
+            'target_url' => 'https://example.com/promo',
+            'total_clicks' => 50,
+            'remaining_clicks' => 50,
+            'delivered_clicks' => 0,
+            'rate_pk' => 3,
+            'pk_cost' => 150,
+            'status' => 'active',
+        ]);
+        $this->post->update(['is_boosted' => true]);
+
+        $response = $this->actingAs($this->user, 'api')->getJson('/v1/timeline/feed');
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+            ]);
+
+        $posts = $response->json('data.data');
+        $this->assertNotEmpty($posts);
+        $boostedPost = collect($posts)->firstWhere('id', $this->post->id);
+        $this->assertNotNull($boostedPost);
+        $this->assertTrue($boostedPost['is_boosted']);
+        $this->assertNotNull($boostedPost['sponsored']);
+        $this->assertEquals($boost->id, $boostedPost['sponsored']['boost_id']);
+        $this->assertEquals('Learn More', $boostedPost['sponsored']['cta']);
+        $this->assertEquals('https://example.com/promo', $boostedPost['sponsored']['target_url']);
+    }
 }
