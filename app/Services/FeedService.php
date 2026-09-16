@@ -26,7 +26,7 @@ class FeedService
 
     private const POST_SUMMARY_COLUMNS = [
         'id', 'user_id', 'content', 'views', 'likes',
-        'comments', 'has_video', 'has_images', 'media_status', 'created_at',
+        'comments', 'has_video', 'has_images', 'media_status', 'is_boosted', 'created_at',
     ];
 
     public function getFeed(?string $viewerId, int $perPage = 10): LengthAwarePaginator
@@ -55,7 +55,12 @@ class FeedService
     {
         $comments = Comment::query()
             ->where('post_id', $postId)
-            ->with('user:id,username,name,avatar')
+            ->whereNull('parent_id')
+            ->with([
+                'user:id,username,name,avatar',
+                'replies.user:id,username,name,avatar',
+            ])
+            ->withCount('replies')
             ->latest('created_at')
             ->paginate($perPage);
 
@@ -63,6 +68,17 @@ class FeedService
             'id' => $c->id,
             'user' => $c->user?->only(['id', 'username', 'name', 'avatar']),
             'message' => $c->message,
+            'parent_id' => $c->parent_id,
+            'is_reply' => false,
+            'reply_count' => (int) ($c->replies_count ?? $c->replies->count()),
+            'replies' => $c->replies->map(fn (Comment $r) => [
+                'id' => $r->id,
+                'user' => $r->user?->only(['id', 'username', 'name', 'avatar']),
+                'message' => $r->message,
+                'parent_id' => $r->parent_id,
+                'is_reply' => true,
+                'created_at' => $r->created_at,
+            ])->values()->all(),
             'created_at' => $c->created_at,
         ]);
 
@@ -191,6 +207,7 @@ class FeedService
             ->with(['images' => fn ($q) => $q->where('processing_status', 'completed')
                 ->select(['id', 'post_id', 'path', 'thumbnail_path', 'medium_path', 'full_path', 'width', 'height'])])
             ->with(['likes' => fn ($q) => $this->latestPerPost($q, self::USER_LIKES_TABLE, self::LIKERS_PREVIEW_LIMIT)])
+            ->with(['activeBoost' => fn ($q) => $q->select(['id', 'post_id', 'cta', 'target_url', 'remaining_clicks', 'status', 'partner_id'])])
             ->when($viewerId, fn ($q) => $q->withExists([
                 'likes as is_liked_by_viewer' => fn ($sub) => $sub->where('user_id', $viewerId),
                 'bookmarks as is_bookmarked' => fn ($sub) => $sub->where('user_id', $viewerId),
@@ -205,13 +222,16 @@ class FeedService
 
     protected function latestPerPost(Relation $q, string $table, int $limit): Relation
     {
+        $whereClause = $table === self::COMMENTS_TABLE ? 'WHERE parent_id IS NULL' : '';
+
         return $q->with('user:id,username,name,avatar')
-            ->whereIn('id', function ($sub) use ($table, $limit) {
+            ->whereIn('id', function ($sub) use ($table, $limit, $whereClause) {
                 $sub->select('id')
                     ->from(DB::raw("(
                         SELECT id, post_id,
-                               ROW_NUMBER() OVER (PARTITION BY post_id ORDER BY created_at DESC) AS rn
+                                ROW_NUMBER() OVER (PARTITION BY post_id ORDER BY created_at DESC) AS rn
                         FROM {$table}
+                        {$whereClause}
                     ) AS ranked"))
                     ->where('rn', '<=', $limit);
             })
@@ -222,11 +242,24 @@ class FeedService
     {
         $post->media = $this->buildMedia($post);
 
+        if ($post->is_boosted && $post->activeBoost) {
+            $post->sponsored = [
+                'boost_id' => $post->activeBoost->id,
+                'cta' => $post->activeBoost->cta,
+                'target_url' => $post->activeBoost->target_url,
+                'click_url' => url("/v1/boosts/{$post->activeBoost->id}/click"),
+            ];
+        } else {
+            $post->sponsored = null;
+        }
+
         if ($includeCommentsPreview) {
             $post->comments_preview = $post->postComments->map(fn ($c) => [
                 'id' => $c->id,
                 'user' => $c->user?->only(['id', 'username', 'name', 'avatar']),
                 'message' => $c->message,
+                'parent_id' => $c->parent_id,
+                'is_reply' => (bool) $c->parent_id,
                 'created_at' => $c->created_at,
             ])->values();
         }
@@ -249,6 +282,7 @@ class FeedService
         $post->unsetRelation('video');
         $post->unsetRelation('images');
         $post->unsetRelation('likes');
+        $post->unsetRelation('activeBoost');
         if ($includeCommentsPreview) {
             $post->unsetRelation('postComments');
         }

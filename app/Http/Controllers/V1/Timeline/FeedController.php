@@ -386,6 +386,7 @@ class FeedController extends Controller
         $validated = $request->validate([
             'post_id' => ['required', 'string'],
             'comment' => ['required', 'string', 'max:500'],
+            'parent_id' => ['sometimes', 'nullable', 'string', 'uuid', 'exists:comments,id'],
         ]);
 
         try {
@@ -400,7 +401,12 @@ class FeedController extends Controller
                 return response()->json(['success' => false, 'message' => 'Post not found'], 404);
             }
 
-            ProcessComment::dispatch($post->id, $user, $validated['comment'])->afterCommit();
+            ProcessComment::dispatch(
+                $post->id,
+                $user,
+                $validated['comment'],
+                $validated['parent_id'] ?? null,
+            )->afterCommit();
 
             return response()->json([
                 'success' => true,

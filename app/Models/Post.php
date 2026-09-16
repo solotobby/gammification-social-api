@@ -21,11 +21,30 @@ class Post extends Model
         'comments',
         'comment_external',
         'status',
+        'is_boosted',
+        'monetization_paused',
         'unicode',
         'has_video',
         'has_images',
         'media_status',
     ];
+
+    protected $casts = [
+        'is_boosted' => 'boolean',
+        'monetization_paused' => 'boolean',
+        'has_video' => 'boolean',
+        'has_images' => 'boolean',
+    ];
+
+    public function boosts()
+    {
+        return $this->hasMany(PostBoost::class);
+    }
+
+    public function activeBoost()
+    {
+        return $this->hasOne(PostBoost::class)->where('status', 'active')->where('remaining_clicks', '>', 0);
+    }
 
     public function user()
     {

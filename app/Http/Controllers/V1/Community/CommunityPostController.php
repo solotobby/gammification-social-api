@@ -146,6 +146,7 @@ class CommunityPostController extends Controller
 
         $validated = $request->validate([
             'content' => ['required', 'string', 'max:'.CommunityPostService::MAX_COMMENT_LENGTH],
+            'parent_id' => ['sometimes', 'nullable', 'string', 'uuid', 'exists:community_post_comments,id'],
         ]);
 
         try {
@@ -154,6 +155,7 @@ class CommunityPostController extends Controller
                 $id,
                 $postId,
                 $validated['content'],
+                $validated['parent_id'] ?? null,
             );
 
             return response()->json([

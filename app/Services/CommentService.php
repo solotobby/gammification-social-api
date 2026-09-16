@@ -18,17 +18,32 @@ class CommentService
 
     public $message;
 
-    public function addComment($postId, User $user, $message)
+    public function addComment($postId, User $user, $message, ?string $parentId = null): Comment
     {
-
         $authUserId = $user->id;
 
-        DB::transaction(function () use ($authUserId, $postId, $message, $user) {
+        return DB::transaction(function () use ($authUserId, $postId, $message, $user, $parentId) {
+            $effectiveParentId = $parentId;
+            $parentComment = null;
+
+            if ($effectiveParentId) {
+                $parentComment = Comment::find($effectiveParentId);
+                if ($parentComment) {
+                    // Flatten nested reply to root parent if parent is already a reply
+                    if ($parentComment->parent_id) {
+                        $effectiveParentId = $parentComment->parent_id;
+                        $parentComment = Comment::find($effectiveParentId) ?? $parentComment;
+                    }
+                } else {
+                    $effectiveParentId = null;
+                }
+            }
 
             // 1️⃣ Create the raw comment
-            Comment::create([
+            $comment = Comment::create([
                 'user_id' => $authUserId,
                 'post_id' => $postId,
+                'parent_id' => $effectiveParentId,
                 'message' => $message,
             ]);
 
@@ -61,33 +76,56 @@ class CommentService
                     'is_paid' => false,
                     'amount' => $this->calculateUniqueEarningPerComment($authUserId),
                     'poster_user_id' => $post->user_id,
-                    'type' => $type, // $isSelfComment ? 'self-comment' : 'comment',
+                    'type' => $type,
                 ]);
 
                 // 5️⃣ Atomic increment
                 Post::whereKey($postId)->increment('comments');
 
                 // 6️⃣ Notify post owner (skip self-comment)
-                // if (! $isSelfComment) {
-                //     $postOwner = User::find($post->user_id);
-                //     $postOwner?->notify(new GeneralNotification([
-                //         'title'   => displayName($user->name) . ' commented on your post',
-                //         'message' => displayName($user->name) . ' commented on your post',
-                //         'icon'    => 'fa-comment text-primary',
-                //         'url'     => url('timeline/' . $post->id),
-                //     ]));
-                // }
+                if (! $isSelfComment) {
+                    $postOwner = User::find($post->user_id);
+                    $postOwner?->notify(new GeneralNotification([
+                        'title'   => displayName($user->name) . ' commented on your post',
+                        'message' => displayName($user->name) . ' commented on your post',
+                        'icon'    => 'fa-comment text-primary',
+                        'url'     => url('timeline/' . $post->id),
+                        'type'    => 'post_comment',
+                        'meta'    => [
+                            'post_id' => $post->id,
+                            'comment_id' => $comment->id,
+                        ],
+                    ]));
+                }
 
             } else {
 
                 // Non-unique comment
-                // Post::whereKey($postId)->increment('comment_external');
                 Post::whereKey($postId)->update([
                     'comment_external' => DB::raw('COALESCE(comment_external, 0) + 1'),
                 ]);
             }
 
-            // userActivity('comment');
+            // If this is a reply, notify parent comment's author if it's someone else
+            if ($parentComment && $parentComment->user_id && $parentComment->user_id !== $authUserId) {
+                if ($parentComment->user_id !== $post->user_id || ! $isFirstComment) {
+                    $parentAuthor = User::find($parentComment->user_id);
+                    $parentAuthor?->notify(new GeneralNotification([
+                        'title'   => displayName($user->name) . ' replied to your comment',
+                        'message' => displayName($user->name) . ' replied to your comment on a post',
+                        'icon'    => 'fa-reply text-primary',
+                        'url'     => url('timeline/' . $post->id),
+                        'type'    => 'comment_reply',
+                        'meta'    => [
+                            'post_id' => $post->id,
+                            'comment_id' => $comment->id,
+                            'parent_id' => $parentComment->id,
+                        ],
+                    ]));
+                }
+            }
+
+            return $comment;
         });
     }
 

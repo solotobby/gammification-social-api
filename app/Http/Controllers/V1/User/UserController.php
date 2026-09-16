@@ -574,4 +574,74 @@ class UserController extends Controller
         }
 
     }
+
+    public function followers(Request $request, string $username)
+    {
+        try {
+            $viewer = $request->user();
+            $targetUser = User::where('username', $username)->firstOrFail();
+
+            $perPage = (int) $request->query('per_page', 20);
+            $perPage = max(1, min(50, $perPage));
+
+            $followers = $this->followservice->getFollowers($targetUser, $viewer, $perPage);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Followers retrieved successfully',
+                'data' => $followers,
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found',
+            ], 404);
+        } catch (Throwable $e) {
+            Log::error('Failed to retrieve followers', [
+                'username' => $username,
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to retrieve followers at this time',
+            ], 500);
+        }
+    }
+
+    public function following(Request $request, string $username)
+    {
+        try {
+            $viewer = $request->user();
+            $targetUser = User::where('username', $username)->firstOrFail();
+
+            $perPage = (int) $request->query('per_page', 20);
+            $perPage = max(1, min(50, $perPage));
+
+            $following = $this->followservice->getFollowing($targetUser, $viewer, $perPage);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Following retrieved successfully',
+                'data' => $following,
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found',
+            ], 404);
+        } catch (Throwable $e) {
+            Log::error('Failed to retrieve following', [
+                'username' => $username,
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to retrieve following at this time',
+            ], 500);
+        }
+    }
 }

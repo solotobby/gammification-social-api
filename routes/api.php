@@ -16,8 +16,10 @@ use App\Http\Controllers\V1\Timeline\BookmarkController;
 use App\Http\Controllers\V1\Timeline\FeedController;
 use App\Http\Controllers\V1\Timeline\PostActionController;
 use App\Http\Controllers\V1\Timeline\PostAnalyticsController;
+use App\Http\Controllers\V1\Timeline\PostBoostController;
 use App\Http\Controllers\V1\User\BankInformationController;
 use App\Http\Controllers\V1\User\LevelController;
+use App\Http\Controllers\V1\User\PayoutController;
 use App\Http\Controllers\V1\User\ReferralController;
 use App\Http\Controllers\V1\User\SocialController;
 use App\Http\Controllers\V1\User\TransactionController;
@@ -80,6 +82,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/{slug}', [BlogController::class, 'show']);
     });
 
+    Route::match(['get', 'post'], '/boosts/{id}/click', [PostBoostController::class, 'click'])->whereUuid('id');
+    Route::get('/paykoin/rates', [PayKoinController::class, 'rates']);
+    Route::get('/gifts', [PostGiftController::class, 'index']);
+    Route::get('/gifts/post/{type}/{id}', [PostGiftController::class, 'postGifts']);
+
     Route::middleware('auth:api,web')->group(function () {
 
         // PayKoin
@@ -94,9 +101,6 @@ Route::prefix('v1')->group(function () {
         // Post Gifts
         Route::prefix('gifts')->group(function () { 
             Route::post('/send', [PostGiftController::class, 'send']);
-            Route::get('/', [PostGiftController::class, 'index']);
-            Route::get('/post/{type}/{id}', [PostGiftController::class, 'postGifts']);
-            Route::get('/paykoin/rates', [PayKoinController::class, 'rates']);
         });
       
 
@@ -115,12 +119,15 @@ Route::prefix('v1')->group(function () {
             Route::get('/currency/list', [UserController::class, 'currency']);
             Route::get('/channel', [UserController::class, 'channel']);
             Route::get('/profile/{username}', [UserController::class, 'profile']);
+            Route::get('/profile/{username}/followers', [UserController::class, 'followers']);
+            Route::get('/profile/{username}/following', [UserController::class, 'following']);
             Route::get('/search', [UserController::class, 'search']);
             Route::post('/toggle/follow', [UserController::class, 'toggle']);
             Route::get('/bank', [BankInformationController::class, 'show']);
             Route::post('/bank', [BankInformationController::class, 'store']);
             Route::put('/bank', [BankInformationController::class, 'update']);
             Route::get('/transactions', [TransactionController::class, 'index']);
+            Route::get('/payouts', [PayoutController::class, 'index']);
             Route::get('/referrals', [ReferralController::class, 'index']);
             Route::get('/wallet', [WalletController::class, 'show']);
             Route::post('/change-password', [AuthController::class, 'changePassword'])
@@ -155,7 +162,18 @@ Route::prefix('v1')->group(function () {
             Route::post('/comment', [FeedController::class, 'postComment']);
             Route::get('/post/{postId}', [FeedController::class, 'viewPost']);
             Route::get('/post/{postId}/analytics', [PostAnalyticsController::class, 'show']);
+            //boost routes
+            Route::get('/post/{postId}/boost/config', [PostBoostController::class, 'config'])->whereUuid('postId');
+            Route::post('/post/{postId}/boost', [PostBoostController::class, 'store'])->whereUuid('postId');
             Route::delete('/delete/post/{postId}', [FeedController::class, 'deletePost']);
+        });
+
+        //boost management routes
+        Route::prefix('boosts')->group(function () {
+            Route::get('/', [PostBoostController::class, 'index']);
+            Route::get('/{id}', [PostBoostController::class, 'show'])->whereUuid('id');
+            Route::post('/{id}/pause', [PostBoostController::class, 'pause'])->whereUuid('id');
+            Route::post('/{id}/resume', [PostBoostController::class, 'resume'])->whereUuid('id');
         });
 
         Route::prefix('rolls')->group(function () {

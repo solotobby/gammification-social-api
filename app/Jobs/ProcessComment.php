@@ -25,6 +25,7 @@ class ProcessComment implements ShouldQueue
         public string $postId,
         public User $user,
         public string $message,
+        public ?string $parentId = null,
     ) {}
 
     /**
@@ -48,7 +49,7 @@ class ProcessComment implements ShouldQueue
     public function handle(CommentService $commentService): void
     {
         try {
-            $commentService->addComment($this->postId, $this->user, $this->message);
+            $commentService->addComment($this->postId, $this->user, $this->message, $this->parentId);
         } catch (Throwable $e) {
             Log::error('Failed to process comment', [
                 'post_id' => $this->postId,

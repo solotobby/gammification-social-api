@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Follow;
 use App\Models\User;
 use App\Notifications\GeneralNotification;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
@@ -119,5 +120,91 @@ class FollowService
     {
         // Wire this up to whatever your existing feed cache key pattern is.
         // e.g. Cache::forget("user_feed:{$userId}");
+    }
+
+    /**
+     * Get paginated followers of a target user.
+     */
+    public function getFollowers(User $targetUser, ?User $viewer = null, int $perPage = 20): LengthAwarePaginator
+    {
+        $paginator = Follow::query()
+            ->where('following_id', $targetUser->id)
+            ->with(['followers.profile'])
+            ->latest('created_at')
+            ->paginate($perPage);
+
+        $followerUserIds = $paginator->getCollection()->pluck('follower_id')->filter()->all();
+
+        $viewerFollowingIds = ($viewer && ! empty($followerUserIds))
+            ? Follow::where('follower_id', $viewer->id)
+                ->whereIn('following_id', $followerUserIds)
+                ->pluck('following_id')
+                ->flip()
+            : collect();
+
+        $paginator->getCollection()->transform(function (Follow $follow) use ($viewer, $viewerFollowingIds) {
+            $user = $follow->followers;
+            if (! $user) {
+                return null;
+            }
+
+            return [
+                'id' => $user->id,
+                'name' => $user->name,
+                'username' => $user->username,
+                'avatar' => $user->avatar,
+                'about' => $user->profile?->about,
+                'is_following' => $viewer ? isset($viewerFollowingIds[$user->id]) : false,
+                'is_me' => $viewer ? $viewer->id === $user->id : false,
+                'followed_at' => $follow->created_at?->toIso8601String(),
+            ];
+        });
+
+        $paginator->setCollection($paginator->getCollection()->filter()->values());
+
+        return $paginator;
+    }
+
+    /**
+     * Get paginated users that a target user is following.
+     */
+    public function getFollowing(User $targetUser, ?User $viewer = null, int $perPage = 20): LengthAwarePaginator
+    {
+        $paginator = Follow::query()
+            ->where('follower_id', $targetUser->id)
+            ->with(['following.profile'])
+            ->latest('created_at')
+            ->paginate($perPage);
+
+        $followingUserIds = $paginator->getCollection()->pluck('following_id')->filter()->all();
+
+        $viewerFollowingIds = ($viewer && ! empty($followingUserIds))
+            ? Follow::where('follower_id', $viewer->id)
+                ->whereIn('following_id', $followingUserIds)
+                ->pluck('following_id')
+                ->flip()
+            : collect();
+
+        $paginator->getCollection()->transform(function (Follow $follow) use ($viewer, $viewerFollowingIds) {
+            $user = $follow->following;
+            if (! $user) {
+                return null;
+            }
+
+            return [
+                'id' => $user->id,
+                'name' => $user->name,
+                'username' => $user->username,
+                'avatar' => $user->avatar,
+                'about' => $user->profile?->about,
+                'is_following' => $viewer ? isset($viewerFollowingIds[$user->id]) : false,
+                'is_me' => $viewer ? $viewer->id === $user->id : false,
+                'followed_at' => $follow->created_at?->toIso8601String(),
+            ];
+        });
+
+        $paginator->setCollection($paginator->getCollection()->filter()->values());
+
+        return $paginator;
     }
 }

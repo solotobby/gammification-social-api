@@ -4,12 +4,14 @@ namespace App\Services;
 
 use App\Jobs\ProcessCommunityPostImage;
 use App\Jobs\ProcessCommunityPostVideo;
+use App\Jobs\SendCommunityNewPostNotificationJob;
 use App\Models\Community;
 use App\Models\CommunityPost;
 use App\Models\CommunityPostComment;
 use App\Models\CommunityPostLike;
 use App\Models\CommunityPostView;
 use App\Models\User;
+use App\Notifications\GeneralNotification;
 use App\Support\StoredMedia;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -46,6 +48,7 @@ class CommunityPostService
                 'user:id,username,name,avatar',
                 'media',
                 'comments' => fn ($q) => $q
+                    ->whereNull('parent_id')
                     ->with('user:id,username,name,avatar')
                     ->latest()
                     ->limit(self::COMMENTS_PREVIEW),
@@ -137,7 +140,12 @@ class CommunityPostService
 
         $paginator = CommunityPostComment::query()
             ->where('community_post_id', $post->id)
-            ->with('user:id,username,name,avatar')
+            ->whereNull('parent_id')
+            ->with([
+                'user:id,username,name,avatar',
+                'replies.user:id,username,name,avatar',
+            ])
+            ->withCount('replies')
             ->latest()
             ->paginate($perPage);
 
@@ -185,7 +193,7 @@ class CommunityPostService
         ];
     }
 
-    public function addComment(User $user, string $communityId, string $postId, string $content): array
+    public function addComment(User $user, string $communityId, string $postId, string $content, ?string $parentId = null): array
     {
         $community = $this->findCommunity($communityId);
         $this->communityService->assertCanInteract($community, $user);
@@ -202,11 +210,30 @@ class CommunityPostService
             throw new InvalidArgumentException('Comment cannot exceed '.self::MAX_COMMENT_LENGTH.' characters.');
         }
 
-        $comment = DB::transaction(function () use ($post, $user, $content) {
+        $effectiveParentId = $parentId;
+        $parentComment = null;
+
+        if ($effectiveParentId) {
+            $parentComment = CommunityPostComment::where('id', $effectiveParentId)
+                ->where('community_post_id', $post->id)
+                ->first();
+
+            if ($parentComment) {
+                if ($parentComment->parent_id) {
+                    $effectiveParentId = $parentComment->parent_id;
+                    $parentComment = CommunityPostComment::find($effectiveParentId) ?? $parentComment;
+                }
+            } else {
+                $effectiveParentId = null;
+            }
+        }
+
+        $comment = DB::transaction(function () use ($post, $user, $content, $effectiveParentId) {
             $comment = CommunityPostComment::create([
                 'community_post_id' => $post->id,
                 'user_id' => $user->id,
                 'content' => $content,
+                'parent_id' => $effectiveParentId,
             ]);
 
             $post->increment('comments_count');
@@ -214,7 +241,25 @@ class CommunityPostService
             return $comment;
         });
 
-        $comment->load('user:id,username,name,avatar');
+        // Notify parent comment author if replying to someone else
+        if ($parentComment && $parentComment->user_id && $parentComment->user_id !== $user->id) {
+            $parentAuthor = User::find($parentComment->user_id);
+            $parentAuthor?->notify(new GeneralNotification([
+                'title' => displayName($user->name) . ' replied to your comment',
+                'message' => displayName($user->name) . ' replied to your comment in ' . $community->name,
+                'icon' => 'fa-reply text-primary',
+                'url' => url('c/' . $community->slug),
+                'type' => 'community_comment_reply',
+                'meta' => [
+                    'community_id' => $community->id,
+                    'community_post_id' => $post->id,
+                    'comment_id' => $comment->id,
+                    'parent_id' => $parentComment->id,
+                ],
+            ]));
+        }
+
+        $comment->load(['user:id,username,name,avatar', 'replies.user:id,username,name,avatar']);
 
         return $this->formatComment($comment);
     }
@@ -328,6 +373,8 @@ class CommunityPostService
             )->afterCommit();
         }
 
+        SendCommunityNewPostNotificationJob::dispatch($post->id)->afterCommit();
+
         $post->load(['user:id,username,name,avatar', 'media']);
 
         return [
@@ -389,9 +436,29 @@ class CommunityPostService
      */
     public function formatComment(CommunityPostComment $comment): array
     {
+        $replies = $comment->relationLoaded('replies')
+            ? $comment->replies->map(fn (CommunityPostComment $reply) => [
+                'id' => $reply->id,
+                'content' => $reply->content,
+                'parent_id' => $reply->parent_id,
+                'is_reply' => true,
+                'user' => $reply->user ? [
+                    'id' => $reply->user->id,
+                    'username' => $reply->user->username,
+                    'name' => $reply->user->name,
+                    'avatar' => $reply->user->avatar,
+                ] : null,
+                'created_at' => $reply->created_at?->toIso8601String(),
+            ])->values()->all()
+            : [];
+
         return [
             'id' => $comment->id,
             'content' => $comment->content,
+            'parent_id' => $comment->parent_id,
+            'is_reply' => $comment->isReply(),
+            'reply_count' => (int) ($comment->replies_count ?? count($replies)),
+            'replies' => $replies,
             'user' => $comment->user ? [
                 'id' => $comment->user->id,
                 'username' => $comment->user->username,
