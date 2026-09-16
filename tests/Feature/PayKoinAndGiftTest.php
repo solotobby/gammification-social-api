@@ -411,4 +411,75 @@ class PayKoinAndGiftTest extends TestCase
                 ],
             ]);
     }
+
+    public function test_feed_includes_gifts_list_with_symbols_and_usernames(): void
+    {
+        $timelinePost = \App\Models\Post::create([
+            'user_id' => $this->creator->id,
+            'content' => 'Timeline post receiving gifts!',
+            'unicode' => 'feed_gift_'.uniqid(),
+            'status' => 'LIVE',
+            'media_status' => 'completed',
+        ]);
+
+        // Send Rose
+        PostGift::create([
+            'sender_id' => $this->sender->id,
+            'recipient_id' => $this->creator->id,
+            'giftable_type' => \App\Models\Post::class,
+            'giftable_id' => $timelinePost->id,
+            'artifact_id' => 'rose',
+            'pk_amount' => 5,
+            'ref' => 'PKN-GIFT-ROSE',
+            'meta' => [
+                'name' => 'Rose',
+                'emoji' => '🌹',
+                'tier' => 'classic',
+            ],
+        ]);
+
+        // Send Heart
+        PostGift::create([
+            'sender_id' => $this->sender->id,
+            'recipient_id' => $this->creator->id,
+            'giftable_type' => \App\Models\Post::class,
+            'giftable_id' => $timelinePost->id,
+            'artifact_id' => 'heart',
+            'pk_amount' => 10,
+            'ref' => 'PKN-GIFT-HEART',
+            'meta' => [
+                'name' => 'Heart',
+                'emoji' => '❤️',
+                'tier' => 'classic',
+            ],
+        ]);
+
+        $response = $this->actingAs($this->sender, 'api')
+            ->getJson('/v1/timeline/feed');
+
+        $response->assertStatus(200);
+        $posts = $response->json('data.data');
+        $feedPost = collect($posts)->firstWhere('id', $timelinePost->id);
+
+        $this->assertNotNull($feedPost);
+        $this->assertEquals(2, $feedPost['gifts_count']);
+        $this->assertCount(2, $feedPost['gifts']);
+
+        $emojis = collect($feedPost['gifts'])->pluck('emoji')->all();
+        $this->assertContains('🌹', $emojis);
+        $this->assertContains('❤️', $emojis);
+
+        $usernames = collect($feedPost['gifts'])->pluck('username')->all();
+        $this->assertContains('sender_user', $usernames);
+
+        $firstGift = $feedPost['gifts'][0];
+        $this->assertArrayHasKey('id', $firstGift);
+        $this->assertArrayHasKey('emoji', $firstGift);
+        $this->assertArrayHasKey('username', $firstGift);
+        $this->assertArrayNotHasKey('name', $firstGift);
+        $this->assertArrayNotHasKey('price', $firstGift);
+        $this->assertArrayNotHasKey('sender_name', $firstGift);
+        $this->assertArrayNotHasKey('sender', $firstGift);
+        $this->assertArrayNotHasKey('sender_avatar', $firstGift);
+    }
 }

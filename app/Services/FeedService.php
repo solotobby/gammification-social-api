@@ -14,7 +14,10 @@ use Illuminate\Support\Facades\DB;
 
 class FeedService
 {
-    public function __construct(protected PostEarningsService $earningsService) {}
+    public function __construct(
+        protected PostEarningsService $earningsService,
+        protected PayKoinService $payKoinService,
+    ) {}
 
     private const COMMENTS_PREVIEW_LIMIT = 3;
 
@@ -45,9 +48,11 @@ class FeedService
             ->where('status', 'LIVE')
             ->findOrFail($postId);
 
-        return $this->applyEarnings(
-            collect([$this->transformPost($post, includeCommentsPreview: false)]),
-            $viewerId,
+        return $this->applyGifts(
+            $this->applyEarnings(
+                collect([$this->transformPost($post, includeCommentsPreview: false)]),
+                $viewerId,
+            )
         )->first();
     }
 
@@ -161,7 +166,9 @@ class FeedService
             ->values();
 
         $bookmarks->setCollection(
-            $this->applyEarnings($ordered, $userId)
+            $this->applyGifts(
+                $this->applyEarnings($ordered, $userId)
+            )
         );
 
         return $bookmarks;
@@ -170,9 +177,11 @@ class FeedService
     protected function transformPage(LengthAwarePaginator $posts, ?string $viewerId): LengthAwarePaginator
     {
         $posts->setCollection(
-            $this->applyEarnings(
-                $posts->getCollection()->map(fn (Post $post) => $this->transformPost($post, includeCommentsPreview: true)),
-                $viewerId,
+            $this->applyGifts(
+                $this->applyEarnings(
+                    $posts->getCollection()->map(fn (Post $post) => $this->transformPost($post, includeCommentsPreview: true)),
+                    $viewerId,
+                )
             )
         );
 
@@ -191,6 +200,24 @@ class FeedService
         return $posts->map(function (Post $post) use ($earnings, $currencyCode, $viewerId) {
             $post->estimatedEarnings = $earnings[$post->id] ?? 0.0;
             $post->currencySymbol = currencySymbol($currencyCode, $viewerId);
+
+            return $post;
+        });
+    }
+
+    protected function applyGifts(Collection $posts): Collection
+    {
+        if ($posts->isEmpty()) {
+            return $posts;
+        }
+
+        $postIds = $posts->pluck('id')->filter()->values()->all();
+        $giftSummaries = $this->payKoinService->giftSummariesForIds('post', $postIds, recentLimit: 6);
+
+        return $posts->map(function (Post $post) use ($giftSummaries) {
+            $summary = $giftSummaries[$post->id] ?? ['total' => 0, 'recent' => []];
+            $post->gifts = $summary['recent'];
+            $post->gifts_count = (int) $summary['total'];
 
             return $post;
         });
@@ -252,6 +279,9 @@ class FeedService
         } else {
             $post->sponsored = null;
         }
+
+        $post->gifts = [];
+        $post->gifts_count = 0;
 
         if ($includeCommentsPreview) {
             $post->comments_preview = $post->postComments->map(fn ($c) => [

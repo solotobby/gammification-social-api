@@ -359,25 +359,30 @@ class PayKoinService
      * @param  array<int, string>  $giftableIds
      * @return array<string, array{total: int, recent: array<int, array<string, mixed>>}>
      */
-    public function giftSummariesForIds(string $giftableType, array $giftableIds): array
+    public function giftSummariesForIds(string $giftableType, array $giftableIds, int $recentLimit = 6): array
     {
         if ($giftableIds === []) {
             return [];
         }
 
         $modelClass = $this->resolveGiftableClass($giftableType);
+        $types = array_values(array_unique([
+            $modelClass,
+            $giftableType,
+            (new $modelClass)->getMorphClass(),
+        ]));
 
         $totals = PostGift::query()
             ->selectRaw('giftable_id, COUNT(*) as total')
-            ->where('giftable_type', $modelClass)
+            ->whereIn('giftable_type', $types)
             ->whereIn('giftable_id', $giftableIds)
             ->groupBy('giftable_id')
             ->pluck('total', 'giftable_id');
 
         $recent = PostGift::query()
-            ->where('giftable_type', $modelClass)
+            ->whereIn('giftable_type', $types)
             ->whereIn('giftable_id', $giftableIds)
-            ->with('sender:id,username')
+            ->with('sender:id,username,name,avatar')
             ->latest()
             ->get()
             ->groupBy('giftable_id');
@@ -388,8 +393,8 @@ class PayKoinService
             $summaries[$id] = [
                 'total' => (int) ($totals[$id] ?? 0),
                 'recent' => ($recent[$id] ?? collect())
-                    ->take(4)
-                    ->map(fn (PostGift $gift) => $this->formatGiftForUi($gift))
+                    ->take($recentLimit)
+                    ->map(fn (PostGift $gift) => $this->formatGiftForFeed($gift))
                     ->values()
                     ->all(),
             ];
@@ -654,6 +659,15 @@ class PayKoinService
             'paykoin_spendable' => 0,
             'paykoin_earned' => 0,
         ]);
+    }
+
+    public function formatGiftForFeed(PostGift $gift): array
+    {
+        return [
+            'id' => $gift->id,
+            'emoji' => $gift->meta['emoji'] ?? '🎁',
+            'username' => $gift->sender?->username ?? 'member',
+        ];
     }
 
     public function formatGiftForUi(PostGift $gift): array
