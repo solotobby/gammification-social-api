@@ -37,6 +37,26 @@ class ExpoPushChannel
                 return;
             }
 
+            if (method_exists($notification, 'toDatabase')) {
+                $dbData = $notification->toDatabase($notifiable);
+                $title = (string) ($dbData['title'] ?? 'Notification');
+                $body = (string) ($dbData['message'] ?? '');
+                $customData = [
+                    'type' => $dbData['type'] ?? 'general',
+                    'url' => $dbData['url'] ?? null,
+                    'meta' => $dbData['meta'] ?? [],
+                ];
+
+                $this->expoService->sendToUser(
+                    $notifiable,
+                    $title,
+                    $body,
+                    $customData
+                );
+
+                return;
+            }
+
             // Fallback for GeneralNotification or notifications exposing $data
             if (isset($notification->data) && is_array($notification->data)) {
                 $data = $notification->data;

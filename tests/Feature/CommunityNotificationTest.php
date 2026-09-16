@@ -58,6 +58,7 @@ class CommunityNotificationTest extends TestCase
                 $channels = $notification->via($owner);
                 $this->assertContains('database', $channels);
                 $this->assertContains('mail', $channels);
+                $this->assertContains(\App\Notifications\Channels\ExpoPushChannel::class, $channels);
 
                 $dbData = $notification->toDatabase($owner);
                 $this->assertEquals('community_join', $dbData['type']);
@@ -130,13 +131,14 @@ class CommunityNotificationTest extends TestCase
 
         (new SendCommunityNewPostNotificationJob($postId))->handle();
 
-        // Member should receive database notification only (no email)
+        // Member should receive database and expo push notification (no email)
         Notification::assertSentTo(
             $member,
             CommunityNewPostNotification::class,
             function (CommunityNewPostNotification $notification) use ($member) {
                 $channels = $notification->via($member);
-                $this->assertEquals(['database'], $channels);
+                $this->assertContains('database', $channels);
+                $this->assertContains(\App\Notifications\Channels\ExpoPushChannel::class, $channels);
                 $this->assertNotContains('mail', $channels);
 
                 $dbData = $notification->toDatabase($member);

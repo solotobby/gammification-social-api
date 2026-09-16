@@ -82,28 +82,28 @@ class CommentService
                 // 5️⃣ Atomic increment
                 Post::whereKey($postId)->increment('comments');
 
-                // 6️⃣ Notify post owner (skip self-comment)
-                if (! $isSelfComment) {
-                    $postOwner = User::find($post->user_id);
-                    $postOwner?->notify(new GeneralNotification([
-                        'title'   => displayName($user->name) . ' commented on your post',
-                        'message' => displayName($user->name) . ' commented on your post',
-                        'icon'    => 'fa-comment text-primary',
-                        'url'     => url('timeline/' . $post->id),
-                        'type'    => 'post_comment',
-                        'meta'    => [
-                            'post_id' => $post->id,
-                            'comment_id' => $comment->id,
-                        ],
-                    ]));
-                }
-
             } else {
 
                 // Non-unique comment
                 Post::whereKey($postId)->update([
                     'comment_external' => DB::raw('COALESCE(comment_external, 0) + 1'),
                 ]);
+            }
+
+            // 6️⃣ Notify post owner (skip self-comment)
+            if (! $isSelfComment) {
+                $postOwner = User::find($post->user_id);
+                $postOwner?->notify(new GeneralNotification([
+                    'title'   => displayName($user->name) . ' commented on your post',
+                    'message' => displayName($user->name) . ' commented on your post',
+                    'icon'    => 'fa-comment text-primary',
+                    'url'     => url('timeline/' . $post->id),
+                    'type'    => 'post_comment',
+                    'meta'    => [
+                        'post_id' => $post->id,
+                        'comment_id' => $comment->id,
+                    ],
+                ]));
             }
 
             // If this is a reply, notify parent comment's author if it's someone else

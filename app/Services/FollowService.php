@@ -35,13 +35,33 @@ class FollowService
         });
 
         // $this->clearUserFeedCache($authUser->id);
-        // $this->clearUserFeedCache($targetUser->id);
-
-        // if ($result['following']) {
-        //     $this->sendNotification($targetUser, $authUser, following: true);
-        // } elseif ($notifyOnUnfollow) {
-        //     $this->sendNotification($targetUser, $authUser, following: false);
-        // }
+        if ($result['following']) {
+            $targetUser->notify(new GeneralNotification([
+                'title'   => displayName($authUser->name) . ' started following you',
+                'message' => displayName($authUser->name) . ' started following you',
+                'icon'    => 'fa-user-plus text-primary',
+                'url'     => url('profile/' . $authUser->username),
+                'type'    => 'user_follow',
+                'meta'    => [
+                    'follower_id'       => $authUser->id,
+                    'follower_username' => $authUser->username,
+                    'follower_avatar'   => $authUser->avatar,
+                ],
+            ]));
+        } else {
+            $targetUser->notify(new GeneralNotification([
+                'title'   => displayName($authUser->name) . ' unfollowed you',
+                'message' => displayName($authUser->name) . ' unfollowed you',
+                'icon'    => 'fa-user-minus text-muted',
+                'url'     => url('profile/' . $authUser->username),
+                'type'    => 'user_unfollow',
+                'meta'    => [
+                    'unfollower_id'       => $authUser->id,
+                    'unfollower_username' => $authUser->username,
+                    'unfollower_avatar'   => $authUser->avatar,
+                ],
+            ]));
+        }
 
         return $result;
     }

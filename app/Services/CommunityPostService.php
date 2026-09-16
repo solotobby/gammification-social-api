@@ -187,6 +187,22 @@ class CommunityPostService
 
         $post->refresh();
 
+        if ($liked && $post->user_id && $post->user_id !== $user->id) {
+            $postAuthor = User::find($post->user_id);
+            $postAuthor?->notify(new GeneralNotification([
+                'title' => displayName($user->name) . ' liked your post',
+                'message' => displayName($user->name) . ' liked your post in ' . $community->name,
+                'icon' => 'fa-heart text-danger',
+                'url' => url('c/' . $community->slug),
+                'type' => 'community_post_like',
+                'meta' => [
+                    'community_id' => $community->id,
+                    'community_post_id' => $post->id,
+                    'user_id' => $user->id,
+                ],
+            ]));
+        }
+
         return [
             'liked' => $liked,
             'likes_count' => (int) $post->likes_count,
@@ -240,6 +256,26 @@ class CommunityPostService
 
             return $comment;
         });
+
+        // Notify post author (unless self-comment, or post author is the parent comment author who will receive reply notification)
+        if ($post->user_id && $post->user_id !== $user->id) {
+            $isParentAuthor = $parentComment && $parentComment->user_id === $post->user_id;
+            if (! $isParentAuthor) {
+                $postAuthor = User::find($post->user_id);
+                $postAuthor?->notify(new GeneralNotification([
+                    'title' => displayName($user->name) . ' commented on your post',
+                    'message' => displayName($user->name) . ' commented on your post in ' . $community->name,
+                    'icon' => 'fa-comment text-primary',
+                    'url' => url('c/' . $community->slug),
+                    'type' => 'community_post_comment',
+                    'meta' => [
+                        'community_id' => $community->id,
+                        'community_post_id' => $post->id,
+                        'comment_id' => $comment->id,
+                    ],
+                ]));
+            }
+        }
 
         // Notify parent comment author if replying to someone else
         if ($parentComment && $parentComment->user_id && $parentComment->user_id !== $user->id) {

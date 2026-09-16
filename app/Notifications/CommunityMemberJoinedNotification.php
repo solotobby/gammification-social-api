@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\Community;
 use App\Models\User;
+use App\Notifications\Channels\ExpoPushChannel;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -19,13 +20,13 @@ class CommunityMemberJoinedNotification extends Notification implements ShouldQu
     ) {}
 
     /**
-     * Delivery channels: email and in-app database notification.
+     * Delivery channels: email, in-app database notification, and Expo push.
      *
      * @return array<int, string>
      */
     public function via(object $notifiable): array
     {
-        return ['database', 'mail'];
+        return ['database', 'mail', ExpoPushChannel::class];
     }
 
     /**
@@ -44,6 +45,26 @@ class CommunityMemberJoinedNotification extends Notification implements ShouldQu
             ->line("Great news! **{$joinedName}** ({$username}) has just joined your community **{$this->community->name}**.")
             ->action('View Community', $communityUrl)
             ->line("Thank you for creating an active space on " . config('app.name') . "!");
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toExpoPush(object $notifiable): array
+    {
+        $db = $this->toDatabase($notifiable);
+
+        return [
+            'title' => $db['title'],
+            'body' => $db['message'],
+            'sound' => 'default',
+            'data' => [
+                'type' => 'community_join',
+                'community_id' => $this->community->id,
+                'community_slug' => $this->community->slug,
+                'user_id' => $this->joinedUser->id,
+            ],
+        ];
     }
 
     /**

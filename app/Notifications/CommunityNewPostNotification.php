@@ -21,13 +21,33 @@ class CommunityNewPostNotification extends Notification implements ShouldQueue
     ) {}
 
     /**
-     * Delivery channels: In-app database notification ONLY (no email).
+     * Delivery channels: In-app database notification and Expo Push.
      *
      * @return array<int, string>
      */
     public function via(object $notifiable): array
     {
-        return ['database'];
+        return ['database', \App\Notifications\Channels\ExpoPushChannel::class];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toExpoPush(object $notifiable): array
+    {
+        $db = $this->toDatabase($notifiable);
+
+        return [
+            'title' => $db['title'],
+            'body' => $db['message'],
+            'sound' => 'default',
+            'data' => [
+                'type' => 'community_post',
+                'community_id' => $this->community->id,
+                'community_slug' => $this->community->slug,
+                'post_id' => $this->post->id,
+            ],
+        ];
     }
 
     /**

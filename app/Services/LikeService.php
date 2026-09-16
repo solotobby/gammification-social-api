@@ -53,17 +53,19 @@ class LikeService
             $post->increment('likes');
 
             // 🔔 Notify post owner (skip self-like)
-            if (! $isSelfLike) {
-
-                // $post->user->notify(
-                //     (new GeneralNotification([
-                //         'title'   => displayName($user->name) . ' liked your post',
-                //         'message' => displayName($user->name) . ' liked your post',
-                //         'icon'    => 'fa-heart text-danger',
-                //         'url'     => url('timeline/' . $post->id),
-                //     ]))->delay(now()->addSeconds(1))
-                // );
-
+            if (! $isSelfLike && $post->user) {
+                $post->user->notify(new GeneralNotification([
+                    'title'   => displayName($user->name) . ' liked your post',
+                    'message' => displayName($user->name) . ' liked your post',
+                    'icon'    => 'fa-heart text-danger',
+                    'url'     => url('timeline/' . $post->id),
+                    'type'    => 'post_like',
+                    'meta'    => [
+                        'post_id'  => $post->id,
+                        'user_id'  => $user->id,
+                        'username' => $user->username,
+                    ],
+                ]));
             }
 
             // userActivity('like');
