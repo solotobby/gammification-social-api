@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\V1\Notification;
 
 use App\Http\Controllers\Controller;
+use App\Services\ExpoPushNotificationService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -10,7 +11,10 @@ use Throwable;
 
 class NotificationController extends Controller
 {
-    public function __construct(protected NotificationService $notificationService) {}
+    public function __construct(
+        protected NotificationService $notificationService,
+        protected ExpoPushNotificationService $expoPushNotificationService
+    ) {}
 
     /**
      * GET /v1/notifications
@@ -187,6 +191,76 @@ class NotificationController extends Controller
             'message' => 'Notifications cleared',
             'deleted' => $deleted,
             'unread_count' => $user->unreadNotifications()->count(),
+        ]);
+    }
+
+    /**
+     * POST /v1/notifications/device-token
+     */
+    public function storeDeviceToken(Request $request)
+    {
+        $user = resolveApiUser($request);
+
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        $validated = $request->validate([
+            'token' => ['required', 'string', 'max:255'],
+            'platform' => ['sometimes', 'nullable', 'string', 'in:ios,android,web'],
+            'device_name' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'ip_address' => ['sometimes', 'nullable', 'ip'],
+            'location_type' => ['sometimes', 'nullable', 'string', 'max:64'],
+        ]);
+
+        $ip = $validated['ip_address'] ?? $request->ip();
+
+        $deviceToken = $this->expoPushNotificationService->registerToken(
+            $user,
+            $validated['token'],
+            $validated['platform'] ?? null,
+            $validated['device_name'] ?? null,
+            $ip,
+            $validated['location_type'] ?? null
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Device token registered successfully',
+            'data' => [
+                'id' => $deviceToken->id,
+                'token' => $deviceToken->token,
+                'platform' => $deviceToken->platform,
+                'device_name' => $deviceToken->device_name,
+                'ip_address' => $deviceToken->ip_address,
+                'location_type' => $deviceToken->location_type,
+                'is_logged_out' => $deviceToken->is_logged_out,
+                'is_active' => $deviceToken->is_active,
+                'last_active_at' => $deviceToken->last_active_at?->toIso8601String(),
+            ],
+        ]);
+    }
+
+    /**
+     * DELETE /v1/notifications/device-token
+     */
+    public function destroyDeviceToken(Request $request)
+    {
+        $user = resolveApiUser($request);
+
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        $validated = $request->validate([
+            'token' => ['required', 'string'],
+        ]);
+
+        $this->expoPushNotificationService->removeToken($validated['token']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Device token removed successfully',
         ]);
     }
 }

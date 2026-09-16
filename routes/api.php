@@ -139,6 +139,8 @@ Route::prefix('v1')->group(function () {
             Route::get('/unread-count', [NotificationController::class, 'unreadCount']);
             Route::post('/read-all', [NotificationController::class, 'markAllAsRead']);
             Route::delete('/', [NotificationController::class, 'destroyAll']);
+            Route::post('/device-token', [NotificationController::class, 'storeDeviceToken']);
+            Route::delete('/device-token', [NotificationController::class, 'destroyDeviceToken']);
             Route::post('/{id}/read', [NotificationController::class, 'markAsRead']);
             Route::delete('/{id}', [NotificationController::class, 'destroy']);
         });

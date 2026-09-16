@@ -435,11 +435,15 @@ class AuthController extends Controller
 
             if ($token) {
                 $token->revoke();
+
+                // Optional: revoke refresh tokens too (recommended for security)
+                if (method_exists($token, 'refreshToken')) {
+                    $token->refreshToken()?->revoke();
+                }
             }
 
-            // Optional: revoke refresh tokens too (recommended for security)
-            if (method_exists($token, 'refreshToken')) {
-                $token->refreshToken()?->revoke();
+            if ($request->filled('device_token')) {
+                app(\App\Services\ExpoPushNotificationService::class)->markLoggedOut((string) $request->input('device_token'));
             }
 
             return response()->json([

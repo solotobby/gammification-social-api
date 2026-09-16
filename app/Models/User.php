@@ -142,4 +142,14 @@ class User extends Authenticatable
                 ->orWhere('email', 'like', $like);
         });
     }
+
+    public function deviceTokens(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(UserDeviceToken::class);
+    }
+
+    public function activeDeviceTokens(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(UserDeviceToken::class)->where('is_active', true);
+    }
 }

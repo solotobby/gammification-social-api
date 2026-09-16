@@ -23,9 +23,30 @@ class GeneralNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        return $this->sendMail
-            ? ['database', 'mail']
-            : ['database'];
+        $channels = ['database', \App\Notifications\Channels\ExpoPushChannel::class];
+
+        if ($this->sendMail) {
+            $channels[] = 'mail';
+        }
+
+        return $channels;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toExpoPush(object $notifiable): array
+    {
+        return [
+            'title' => $this->data['title'] ?? 'Notification',
+            'body' => $this->data['message'] ?? '',
+            'sound' => 'default',
+            'data' => [
+                'type' => $this->data['type'] ?? 'general',
+                'url' => $this->data['url'] ?? null,
+                'meta' => $this->data['meta'] ?? [],
+            ],
+        ];
     }
 
     public function toMail(object $notifiable): MailMessage
