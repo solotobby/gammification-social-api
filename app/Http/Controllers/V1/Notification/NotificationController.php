@@ -209,6 +209,7 @@ class NotificationController extends Controller
             'token' => ['required', 'string', 'max:255'],
             'platform' => ['sometimes', 'nullable', 'string', 'in:ios,android,web'],
             'device_name' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'device_id' => ['sometimes', 'nullable', 'string', 'max:255'],
             'ip_address' => ['sometimes', 'nullable', 'ip'],
             'location_type' => ['sometimes', 'nullable', 'string', 'max:64'],
             'location' => ['sometimes', 'nullable', 'string', 'max:150'],
@@ -232,7 +233,8 @@ class NotificationController extends Controller
             $validated['device_name'] ?? null,
             $ip,
             $validated['location_type'] ?? null,
-            $location
+            $location,
+            $validated['device_id'] ?? null
         );
 
         return response()->json([
@@ -243,6 +245,7 @@ class NotificationController extends Controller
                 'token' => $deviceToken->token,
                 'platform' => $deviceToken->platform,
                 'device_name' => $deviceToken->device_name,
+                'device_id' => $deviceToken->device_id,
                 'ip_address' => $deviceToken->ip_address,
                 'location_type' => $deviceToken->location_type,
                 'location' => $deviceToken->location,

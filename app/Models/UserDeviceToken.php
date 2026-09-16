@@ -18,6 +18,7 @@ class UserDeviceToken extends Model
         'token',
         'platform',
         'device_name',
+        'device_id',
         'ip_address',
         'location_type',
         'location',
